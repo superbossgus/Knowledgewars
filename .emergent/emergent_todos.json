@@ -5,23 +5,11 @@
   },
   {
     "content": "Phase 1: Setup environment and install dependencies",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Create comprehensive POC test script (OpenAI + WebSocket + Stripe + ELO)",
     "status": "in_progress"
-  },
-  {
-    "content": "Phase 1: Create POC test script - OpenAI question generation",
-    "status": "pending"
-  },
-  {
-    "content": "Phase 1: Create POC test script - WebSocket real-time duel",
-    "status": "pending"
-  },
-  {
-    "content": "Phase 1: Create POC test script - Stripe flows",
-    "status": "pending"
-  },
-  {
-    "content": "Phase 1: Create POC test script - ELO calculation",
-    "status": "pending"
   },
   {
     "content": "Phase 1: Run and fix POC until all tests pass",
