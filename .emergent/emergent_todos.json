@@ -1,34 +1,42 @@
 [
   {
-    "content": "Phase 1: All POC tests completed",
+    "content": "Analyze codebase structure and detect app type",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Get design guidelines from design_agent",
+    "content": "Check environment files for malformed entries",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Install frontend dependencies",
+    "content": "Scan for hardcoded URLs, secrets, and credentials",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Backend Implementation",
+    "content": "Verify CORS configuration",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Frontend Implementation",
+    "content": "Check for ML/blockchain dependencies",
     "status": "completed"
   },
   {
-    "content": "Phase 2: End to End Testing using Testing Agent",
+    "content": "Validate database queries for optimization",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Fix i18n issue found by testing agent",
+    "content": "Check supervisor configuration",
     "status": "completed"
   },
   {
-    "content": "Phase 2: All user stories covered in Development and testing",
+    "content": "Verify load_dotenv usage",
     "status": "completed"
+  },
+  {
+    "content": "Check ignore files for blocking required files",
+    "status": "completed"
+  },
+  {
+    "content": "Generate final deployment report",
+    "status": "in_progress"
   }
 ]
