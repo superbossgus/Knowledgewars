@@ -37,30 +37,48 @@
   }
 
   .dark {
-    --background: 222 30% 8%;
-    --foreground: 0 0% 98%;
-    --card: 222 32% 10%;
-    --card-foreground: 0 0% 98%;
-    --popover: 222 32% 10%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 173 85% 45%;
-    --primary-foreground: 222 30% 8%;
-    --secondary: 222 22% 16%;
-    --secondary-foreground: 0 0% 98%;
-    --accent: 96 86% 56%;
-    --accent-foreground: 222 30% 8%;
-    --muted: 222 20% 18%;
-    --muted-foreground: 210 6% 62%;
-    --destructive: 8 78% 54%;
+    /* Neon Cyberpunk Theme */
+    --background: 220 25% 6%;
+    --foreground: 180 100% 95%;
+    --card: 220 28% 8%;
+    --card-foreground: 180 100% 95%;
+    --popover: 220 28% 8%;
+    --popover-foreground: 180 100% 95%;
+    
+    /* Neon Cyan Primary */
+    --primary: 180 100% 50%;
+    --primary-foreground: 220 25% 6%;
+    
+    /* Dark secondary */
+    --secondary: 220 22% 12%;
+    --secondary-foreground: 180 100% 95%;
+    
+    /* Neon Lime Accent */
+    --accent: 85 100% 55%;
+    --accent-foreground: 220 25% 6%;
+    
+    /* Neon Pink/Magenta */
+    --neon-pink: 320 100% 60%;
+    --neon-orange: 25 100% 55%;
+    --neon-green: 140 100% 50%;
+    --neon-red: 0 100% 60%;
+    --neon-purple: 280 100% 65%;
+    
+    --muted: 220 20% 14%;
+    --muted-foreground: 210 10% 55%;
+    --destructive: 0 100% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 222 18% 22%;
-    --input: 222 18% 22%;
-    --ring: 173 85% 45%;
-    --chart-1: 173 80% 50%;
-    --chart-2: 96 74% 54%;
-    --chart-3: 12 86% 60%;
-    --chart-4: 197 100% 46%;
-    --chart-5: 45 92% 58%;
+    --border: 220 18% 18%;
+    --input: 220 18% 18%;
+    --ring: 180 100% 50%;
+    
+    /* Neon glow values */
+    --glow-cyan: 0 0 20px hsl(180 100% 50% / 0.5), 0 0 40px hsl(180 100% 50% / 0.3);
+    --glow-pink: 0 0 20px hsl(320 100% 60% / 0.5), 0 0 40px hsl(320 100% 60% / 0.3);
+    --glow-lime: 0 0 20px hsl(85 100% 55% / 0.5), 0 0 40px hsl(85 100% 55% / 0.3);
+    --glow-orange: 0 0 20px hsl(25 100% 55% / 0.5), 0 0 40px hsl(25 100% 55% / 0.3);
+    --glow-green: 0 0 20px hsl(140 100% 50% / 0.5), 0 0 40px hsl(140 100% 50% / 0.3);
+    --glow-red: 0 0 20px hsl(0 100% 60% / 0.5), 0 0 40px hsl(0 100% 60% / 0.3);
   }
 
   /* League colors */
