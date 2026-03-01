@@ -7,7 +7,7 @@
 
 ## 2) Development Phases
 
-### Phase 1: Core POC (Do not proceed until green)
+### Phase 1: Core POC (Do not proceed until green) ✅ COMPLETED
 Hardest parts to validate in isolation:
 - OpenAI (gpt-4o-mini via Emergent Universal Key): Generate 10Q sets with 6 options (A–F), 1 correct, hint, explanation_short; strict JSON; cache by (language, topic_normalized, prompt_version); schema validation + light sanity checks.
 - Real-time engine (FastAPI WebSockets): room lifecycle, per-question 10s timer (server-authoritative), first-correct +2, incorrect locks player; hint event (-1, private to requester, notify rival), scoreboard sync.

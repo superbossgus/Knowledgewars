@@ -13,10 +13,30 @@
   },
   {
     "content": "Phase 1: Run and fix POC until all tests pass",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Phase 1: All user stories covered in POC testing",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Get design guidelines from design_agent",
+    "status": "in_progress"
+  },
+  {
+    "content": "Phase 2: Backend Implementation",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: Frontend Implementation",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: End to End Testing using Testing Agent",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 2: All user stories covered in Development and testing",
     "status": "pending"
   }
 ]
