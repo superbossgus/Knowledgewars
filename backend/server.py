@@ -43,7 +43,9 @@ app.add_middleware(
 
 # MongoDB connection
 MONGO_URL = os.getenv("MONGO_URL")
-DB_NAME = os.getenv("DB_NAME", "knowledge_wars")
+DB_NAME = os.getenv("DB_NAME")
+if not DB_NAME:
+    raise ValueError("DB_NAME environment variable is required")
 client = MongoClient(MONGO_URL)
 db = client[DB_NAME]
 
@@ -60,8 +62,14 @@ payment_transactions_col = db["payment_transactions"]
 
 # Indexes
 users_col.create_index("email", unique=True)
+users_col.create_index("elo_rating")
+users_col.create_index([("dnd_enabled", 1)])
 matches_col.create_index([("created_at", DESCENDING)])
+matches_col.create_index([("player_a_id", 1), ("status", 1)])
+matches_col.create_index([("player_b_id", 1), ("status", 1)])
+matches_col.create_index([("status", 1), ("ended_at", DESCENDING)])
 question_sets_col.create_index([("topic_normalized", 1), ("language", 1)])
+match_events_col.create_index([("match_id", 1), ("question_index", 1), ("event_type", 1)])
 
 # Services
 EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
@@ -195,9 +203,22 @@ async def get_online_users(current_user: dict = Depends(get_current_user)):
     # Get users who are connected via WebSocket and not in DND mode
     online_user_ids = list(manager.active_connections.keys())
     
+    # Limit to 50 users to prevent unbounded $in operator
+    if len(online_user_ids) > 50:
+        online_user_ids = online_user_ids[:50]
+    
+    # Filter out current user and convert to ObjectId
+    valid_ids = []
+    for uid in online_user_ids:
+        if uid != current_user["id"]:
+            try:
+                valid_ids.append(ObjectId(uid))
+            except:
+                continue
+    
     users = users_col.find(
         {
-            "_id": {"$in": [ObjectId(uid) for uid in online_user_ids if uid != current_user["id"]]},
+            "_id": {"$in": valid_ids},
             "dnd_enabled": False
         },
         {
@@ -589,7 +610,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
         "match_id": ObjectId(match_id),
         "question_index": question_index,
         "event_type": "correct_answer"
-    }))
+    }).limit(1))
     
     if events:
         # Already answered
@@ -670,12 +691,15 @@ async def handle_hint_request(match_id: str, user_id: str, data: dict):
     question_index = data.get("question_index", 0)
     
     # Check if hint already requested for this question by this user
-    existing = match_events_col.find_one({
-        "match_id": ObjectId(match_id),
-        "user_id": ObjectId(user_id),
-        "question_index": question_index,
-        "event_type": "hint_requested"
-    })
+    existing = match_events_col.find_one(
+        {
+            "match_id": ObjectId(match_id),
+            "user_id": ObjectId(user_id),
+            "question_index": question_index,
+            "event_type": "hint_requested"
+        },
+        {"_id": 1}
+    )
     
     if existing:
         await manager.send_message(user_id, {
@@ -1070,6 +1094,12 @@ async def get_admin_stats(current_user: dict = Depends(get_current_user)):
 # ============================================================================
 # HEALTH CHECK
 # ============================================================================
+
+@app.get("/health")
+async def root_health_check():
+    """Root health check endpoint for Kubernetes probes"""
+    return {"status": "ok"}
+
 
 @app.get("/api/health")
 async def health_check():
