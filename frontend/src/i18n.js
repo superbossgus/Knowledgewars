@@ -241,9 +241,14 @@ const resources = {
 i18n
   .use(initReactI18next)
   .init({
-    resources,
+    resources: {
+      es: { translation: resources.es },
+      en: { translation: resources.en },
+      pt: { translation: resources.pt }
+    },
     lng: navigator.language.split('-')[0] || 'es',
     fallbackLng: 'es',
+    defaultNS: 'translation',
     interpolation: {
       escapeValue: false
     }
