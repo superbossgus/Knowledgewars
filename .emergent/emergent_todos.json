@@ -1,11 +1,11 @@
 [
   {
     "content": "Phase 1: Get integration playbooks (OpenAI + Stripe)",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Phase 1: Setup environment and install dependencies",
-    "status": "pending"
+    "status": "in_progress"
   },
   {
     "content": "Phase 1: Create POC test script - OpenAI question generation",
