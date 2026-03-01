@@ -206,7 +206,7 @@
   height: 6rem;
 }
 
-/* Scoreboard */
+/* Scoreboard with neon effects */
 .scoreboard {
   position: sticky;
   top: 0;
@@ -215,10 +215,28 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
   border-radius: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(12px);
+  border: 2px solid hsl(180 100% 50% / 0.3);
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.4) 100%);
+  backdrop-filter: blur(16px);
   padding: 0.5rem;
+  box-shadow: 
+    0 0 20px hsl(180 100% 50% / 0.2),
+    inset 0 0 20px rgba(180, 255, 255, 0.05);
+}
+
+.scoreboard::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 0.75rem;
+  padding: 2px;
+  background: linear-gradient(135deg, hsl(180 100% 50% / 0.4), hsl(320 100% 60% / 0.4));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: glow-rotate 4s linear infinite;
 }
 
 /* Loading skeleton */
