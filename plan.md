@@ -42,7 +42,7 @@ Phase 1 User Stories
 
 ---
 
-### Phase 2: Main App Development (Full MVP)
+### Phase 2: Main App Development (Full MVP) ✅ COMPLETED
 Architecture
 - Backend: FastAPI @ 0.0.0.0:8001, MongoDB, all routes prefixed with /api, WebSockets for /ws/match/{roomId}
 - Frontend: React (mobile-first), react-router, react-i18next (es/en/pt), shadcn/ui design system
