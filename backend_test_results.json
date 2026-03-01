@@ -1,0 +1,69 @@
+{
+  "timestamp": "2026-03-01T22:18:34.378766",
+  "total_tests": 12,
+  "passed": 10,
+  "failed": 2,
+  "success_rate": 83.33333333333334,
+  "results": [
+    {
+      "test": "GET /api/health",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "POST /api/auth/register",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "POST /api/auth/login",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/auth/me",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/users/duels/remaining",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/topics/top",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/users/online",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/leaderboards/global",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/leaderboards/weekly",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "GET /api/questions/generate",
+      "passed": false,
+      "details": "Request timeout"
+    },
+    {
+      "test": "POST /api/payments/checkout (subscription)",
+      "passed": false,
+      "details": "Request timeout"
+    },
+    {
+      "test": "GET /api/admin/stats",
+      "passed": true,
+      "details": ""
+    }
+  ]
+}
