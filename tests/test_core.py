@@ -117,6 +117,26 @@ Return ONLY valid JSON (no markdown):
             
             # Validate structure
             assert 'questions' in data, "Missing 'questions' field"
+            
+            # If we got fewer than 10 questions, try one retry
+            if len(data['questions']) != 10:
+                print(f"  ⚠ Got {len(data['questions'])} questions, retrying...")
+                chat = LlmChat(
+                    api_key=self.api_key,
+                    session_id=f"qgen_{topic_normalized}_{language}_retry",
+                    system_message=self.SYSTEM_PROMPT
+                )
+                chat.with_model("openai", "gpt-4o-mini")
+                response = await chat.send_message(UserMessage(text=prompt))
+                
+                response_text = response.strip()
+                if response_text.startswith("```"):
+                    response_text = response_text.split("```")[1]
+                    if response_text.startswith("json"):
+                        response_text = response_text[4:]
+                
+                data = json.loads(response_text)
+            
             assert len(data['questions']) == 10, f"Expected 10 questions, got {len(data['questions'])}"
             
             for i, q in enumerate(data['questions']):
@@ -223,12 +243,17 @@ class DuelSimulator:
         self.room_state[room_id]['current_question'] = question_num
         self.room_state[room_id]['question_start_time'] = datetime.utcnow().timestamp()
         self.room_state[room_id]['timer_active'] = True
+        self.room_state[room_id]['question_answered'] = False
     
     def submit_answer(self, room_id: str, player_id: str, answer: str, correct: str) -> Dict:
         """Process answer submission"""
         room = self.room_state[room_id]
         player = room['players'][player_id]
         question_num = room['current_question']
+        
+        # Check if question already answered correctly
+        if room.get('question_answered', False):
+            return {'result': 'already_answered', 'score_delta': 0}
         
         # Check if timer expired
         elapsed = datetime.utcnow().timestamp() - room['question_start_time']
@@ -244,6 +269,7 @@ class DuelSimulator:
             # First correct answer gets +2
             player['score'] += 2
             room['timer_active'] = False
+            room['question_answered'] = True
             return {'result': 'correct', 'score_delta': 2}
         else:
             # Incorrect: lock player for this question
