@@ -1,10 +1,10 @@
 [
   {
     "content": "Analyze codebase for deployment blockers",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Generate deployment report in YAML format",
-    "status": "pending"
+    "status": "in_progress"
   }
 ]
