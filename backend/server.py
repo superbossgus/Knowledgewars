@@ -195,10 +195,19 @@ async def get_online_users(current_user: dict = Depends(get_current_user)):
     # Get users who are connected via WebSocket and not in DND mode
     online_user_ids = list(manager.active_connections.keys())
     
-    users = users_col.find({
-        "_id": {"$in": [ObjectId(uid) for uid in online_user_ids if uid != current_user["id"]]},
-        "dnd_enabled": False
-    }).limit(50)
+    users = users_col.find(
+        {
+            "_id": {"$in": [ObjectId(uid) for uid in online_user_ids if uid != current_user["id"]]},
+            "dnd_enabled": False
+        },
+        {
+            "display_name": 1,
+            "country_code": 1,
+            "elo_rating": 1,
+            "league": 1,
+            "favorite_topic": 1
+        }
+    ).limit(50)
     
     return {"users": serialize_doc(list(users))}
 
@@ -220,14 +229,30 @@ async def get_user_profile(user_id: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Get match history
-    matches = list(matches_col.find({
-        "$or": [
-            {"player_a_id": ObjectId(user_id)},
-            {"player_b_id": ObjectId(user_id)}
-        ],
-        "status": "finished"
-    }).sort("ended_at", DESCENDING).limit(10))
+    # Get match history (without full questions array)
+    matches = list(matches_col.find(
+        {
+            "$or": [
+                {"player_a_id": ObjectId(user_id)},
+                {"player_b_id": ObjectId(user_id)}
+            ],
+            "status": "finished"
+        },
+        {
+            "player_a_name": 1,
+            "player_b_name": 1,
+            "player_a_country": 1,
+            "player_b_country": 1,
+            "score_a": 1,
+            "score_b": 1,
+            "topic": 1,
+            "language": 1,
+            "ended_at": 1,
+            "winner_id": 1,
+            "elo_delta_a": 1,
+            "elo_delta_b": 1
+        }
+    ).sort("ended_at", DESCENDING).limit(10))
     
     return {
         "user": serialize_doc(user),
@@ -793,7 +818,18 @@ async def finish_match(match_id: str):
 @app.get("/api/leaderboards/global")
 async def get_global_leaderboard(limit: int = 50):
     """Get global leaderboard by ELO"""
-    users = list(users_col.find().sort("elo_rating", DESCENDING).limit(limit))
+    users = list(users_col.find(
+        {},
+        {
+            "display_name": 1,
+            "country_code": 1,
+            "elo_rating": 1,
+            "league": 1,
+            "wins": 1,
+            "losses": 1,
+            "total_duels": 1
+        }
+    ).sort("elo_rating", DESCENDING).limit(limit))
     
     entries = []
     for rank, user in enumerate(users, 1):
