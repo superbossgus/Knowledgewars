@@ -59,7 +59,8 @@ export default function MatchPage() {
 
   const connectWebSocket = () => {
     const token = localStorage.getItem('auth_token');
-    const wsUrl = process.env.REACT_APP_BACKEND_URL.replace('http', 'ws');
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+    const wsUrl = backendUrl.replace(/^http/, 'ws');
     const ws = new WebSocket(`${wsUrl}/ws/match/${matchId}?token=${token}`);
     
     ws.onopen = () => {
