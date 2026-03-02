@@ -21,7 +21,8 @@ export default function LobbyPage() {
 
   useEffect(() => {
     loadOnlineUsers();
-    const interval = setInterval(loadOnlineUsers, 5000);
+    // Refresh every 10 seconds to keep the list updated
+    const interval = setInterval(loadOnlineUsers, 10000);
     return () => clearInterval(interval);
   }, []);
 
