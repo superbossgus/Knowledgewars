@@ -59,7 +59,11 @@ export default function MatchPage() {
 
   const connectWebSocket = () => {
     const token = localStorage.getItem('auth_token');
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+    const backendUrl = process.env.REACT_APP_BACKEND_URL;
+    if (!backendUrl) {
+      console.error('REACT_APP_BACKEND_URL is not configured');
+      return;
+    }
     const wsUrl = backendUrl.replace(/^http/, 'ws');
     const ws = new WebSocket(`${wsUrl}/ws/match/${matchId}?token=${token}`);
     
