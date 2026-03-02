@@ -64,6 +64,7 @@ payment_transactions_col = db["payment_transactions"]
 users_col.create_index("email", unique=True)
 users_col.create_index("elo_rating")
 users_col.create_index([("dnd_enabled", 1)])
+users_col.create_index([("last_seen", DESCENDING)])
 matches_col.create_index([("created_at", DESCENDING)])
 matches_col.create_index([("player_a_id", 1), ("status", 1)])
 matches_col.create_index([("player_b_id", 1), ("status", 1)])
@@ -155,6 +156,7 @@ async def register(user_data: UserCreate):
         "premium_status": False,
         "premium_expiration": None,
         "created_at": datetime.utcnow(),
+        "last_seen": datetime.utcnow(),
         "wins": 0,
         "losses": 0,
         "total_duels": 0
@@ -179,6 +181,12 @@ async def login(credentials: UserLogin):
     if not user or not verify_password(credentials.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Update last_seen on login
+    users_col.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"last_seen": datetime.utcnow()}}
+    )
+    
     token = create_access_token({"user_id": str(user["_id"])})
     
     return {
@@ -199,36 +207,32 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/users/online")
 async def get_online_users(current_user: dict = Depends(get_current_user)):
-    """Get list of online users for matchmaking"""
-    # Get users who are connected via WebSocket and not in DND mode
-    online_user_ids = list(manager.active_connections.keys())
+    """Get list of online users for matchmaking (based on recent activity)"""
+    # Consider users online if they've been active in the last 5 minutes
+    five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     
-    # Limit to 50 users to prevent unbounded $in operator
-    if len(online_user_ids) > 50:
-        online_user_ids = online_user_ids[:50]
+    # Update current user's last_seen timestamp
+    users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"last_seen": datetime.utcnow()}}
+    )
     
-    # Filter out current user and convert to ObjectId
-    valid_ids = []
-    for uid in online_user_ids:
-        if uid != current_user["id"]:
-            try:
-                valid_ids.append(ObjectId(uid))
-            except:
-                continue
-    
+    # Find recently active users (excluding current user and DND users)
     users = users_col.find(
         {
-            "_id": {"$in": valid_ids},
-            "dnd_enabled": False
+            "_id": {"$ne": ObjectId(current_user["id"])},
+            "dnd_enabled": False,
+            "last_seen": {"$gte": five_minutes_ago}
         },
         {
             "display_name": 1,
             "country_code": 1,
             "elo_rating": 1,
             "league": 1,
-            "favorite_topic": 1
+            "favorite_topic": 1,
+            "last_seen": 1
         }
-    ).limit(50)
+    ).sort("last_seen", DESCENDING).limit(50)
     
     return {"users": serialize_doc(list(users))}
 
