@@ -46,8 +46,11 @@ export default function LobbyPage() {
         language: user?.language || 'es'
       });
       
-      toast.success('Challenge sent!');
-      navigate(`/match/${response.data.match.id}`);
+      toast.success(`Challenge sent! Topic: ${selectedTopic}`);
+      // Don't navigate immediately, let them accept first
+      setTimeout(() => {
+        navigate('/home');
+      }, 1500);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create match');
     } finally {
@@ -134,7 +137,7 @@ export default function LobbyPage() {
           transition={{ delay: 0.3 }}
           className="bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6"
         >
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2 text-white">
             <Users className="w-5 h-5 text-primary" />
             Online Players ({onlineUsers.length})
           </h2>
@@ -156,8 +159,8 @@ export default function LobbyPage() {
                   <div className="flex items-center gap-3">
                     <span className={`fi fi-${player.country_code?.toLowerCase()} h-6 w-8 rounded`}></span>
                     <div>
-                      <div className="font-semibold">{player.display_name}</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="font-semibold text-white">{player.display_name}</div>
+                      <div className="text-sm text-cyan-300">
                         {player.elo_rating} ELO
                       </div>
                     </div>
