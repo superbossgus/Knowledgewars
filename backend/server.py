@@ -542,6 +542,27 @@ async def get_match(match_id: str, current_user: dict = Depends(get_current_user
     return {"match": serialize_doc(match)}
 
 
+@app.get("/api/matches/pending")
+async def get_pending_matches(current_user: dict = Depends(get_current_user)):
+    """Get pending match challenges for current user"""
+    matches = list(matches_col.find(
+        {
+            "player_b_id": ObjectId(current_user["id"]),
+            "status": "pending"
+        },
+        {
+            "player_a_id": 1,
+            "player_a_name": 1,
+            "player_a_country": 1,
+            "topic": 1,
+            "language": 1,
+            "created_at": 1
+        }
+    ).sort("created_at", DESCENDING).limit(10))
+    
+    return {"matches": serialize_doc(matches)}
+
+
 # ============================================================================
 # WEBSOCKET FOR REAL-TIME MATCH
 # ============================================================================
