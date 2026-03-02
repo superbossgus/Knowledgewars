@@ -237,7 +237,8 @@ export default function MatchPage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-6 mb-6"
+          className="mt-4 rounded-2xl border-2 border-primary/30 bg-white/5 p-6 mb-6 backdrop-blur-sm"
+          style={{ boxShadow: '0 0 20px hsl(180 100% 50% / 0.1)' }}
         >
           <div className="text-sm text-cyan-300 mb-3 font-semibold">
             Question {currentQuestion + 1} / 10
@@ -248,7 +249,7 @@ export default function MatchPage() {
         </motion.div>
 
         {/* Answers Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {['A', 'B', 'C', 'D', 'E', 'F'].map((letter) => (
             <AnswerOption
               key={letter}
@@ -263,10 +264,10 @@ export default function MatchPage() {
 
         {/* Hint Button */}
         {!hintUsed && (
-          <div className="flex items-center justify-between p-4 rounded-lg bg-card/50 border border-white/10">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-card/50 border-2 border-lime-500/30 backdrop-blur-sm">
+            <div className="flex items-center gap-2 text-sm text-lime-300">
               <Lightbulb className="w-4 h-4" />
-              <span>Need help? Request a hint</span>
+              <span className="font-medium">Need help? Request a hint</span>
             </div>
             <button
               onClick={handleRequestHint}
@@ -279,9 +280,9 @@ export default function MatchPage() {
         )}
 
         {hintText && (
-          <div className="mt-3 p-4 rounded-lg bg-accent/10 border border-accent/30 flex items-start gap-3">
-            <Lightbulb className="w-5 h-5 text-accent shrink-0 mt-0.5" />
-            <div className="text-sm">{hintText}</div>
+          <div className="mt-3 p-4 rounded-lg bg-lime-500/10 border-2 border-lime-500/30 flex items-start gap-3">
+            <Lightbulb className="w-5 h-5 text-lime-400 shrink-0 mt-0.5" />
+            <div className="text-sm text-white font-medium">{hintText}</div>
           </div>
         )}
       </div>

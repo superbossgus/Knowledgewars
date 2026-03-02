@@ -78,14 +78,14 @@ export default function LobbyPage() {
         >
           <button
             onClick={() => navigate('/home')}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 transition-colors"
+            className="flex items-center gap-2 text-cyan-300 hover:text-cyan-100 mb-4 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Home
           </button>
           
-          <h1 className="text-3xl md:text-4xl font-bold font-space mb-2">Matchmaking</h1>
-          <p className="text-muted-foreground">Find an opponent and start dueling!</p>
+          <h1 className="text-3xl md:text-4xl font-bold font-space mb-2 text-white">Matchmaking</h1>
+          <p className="text-cyan-300">Find an opponent and start dueling!</p>
         </motion.div>
 
         {/* Topic Selection */}
