@@ -16,10 +16,48 @@ export default function HomePage() {
   const [topTopics, setTopTopics] = useState([]);
   const [duelsRemaining, setDuelsRemaining] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendingChallenges, setPendingChallenges] = useState([]);
 
   useEffect(() => {
     loadData();
+    checkPendingChallenges();
+    
+    // Check for challenges every 5 seconds
+    const interval = setInterval(checkPendingChallenges, 5000);
+    return () => clearInterval(interval);
   }, []);
+
+  const checkPendingChallenges = async () => {
+    try {
+      const response = await api.get('/api/matches/pending');
+      if (response.data.matches && response.data.matches.length > 0) {
+        setPendingChallenges(response.data.matches);
+      }
+    } catch (error) {
+      console.error('Failed to check pending challenges');
+    }
+  };
+
+  const handleAcceptChallenge = async (matchId) => {
+    try {
+      await api.post(`/api/matches/${matchId}/accept`);
+      toast.success('Challenge accepted!');
+      setPendingChallenges(prev => prev.filter(m => m.id !== matchId));
+      navigate(`/match/${matchId}`);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to accept challenge');
+    }
+  };
+
+  const handleRejectChallenge = async (matchId) => {
+    try {
+      await api.post(`/api/matches/${matchId}/reject`);
+      toast.info('Challenge rejected');
+      setPendingChallenges(prev => prev.filter(m => m.id !== matchId));
+    } catch (error) {
+      toast.error('Failed to reject challenge');
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -65,6 +103,45 @@ export default function HomePage() {
   return (
     <div className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="container mx-auto max-w-7xl">
+        {/* Pending Challenges Modal */}
+        {pendingChallenges.length > 0 && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-card border-2 border-primary rounded-2xl p-6 max-w-md w-full"
+              style={{ boxShadow: 'var(--glow-cyan)' }}
+            >
+              <h2 className="text-2xl font-bold font-space mb-4 text-white">¡Te han retado!</h2>
+              {pendingChallenges.map((challenge) => (
+                <div key={challenge.id} className="mb-4 p-4 rounded-lg bg-muted/20 border border-primary/30">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className={`fi fi-${challenge.player_a_country?.toLowerCase()} h-6 w-8 rounded`}></span>
+                    <div>
+                      <div className="font-semibold text-white text-lg">{challenge.player_a_name}</div>
+                      <div className="text-sm text-cyan-300">Tema: {challenge.topic}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleAcceptChallenge(challenge.id)}
+                      className="flex-1 btn-primary py-2"
+                    >
+                      Aceptar
+                    </button>
+                    <button
+                      onClick={() => handleRejectChallenge(challenge.id)}
+                      className="flex-1 btn-secondary-glass py-2"
+                    >
+                      Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          </div>
+        )}
+        
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
