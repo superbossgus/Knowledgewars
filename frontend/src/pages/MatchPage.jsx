@@ -239,10 +239,10 @@ export default function MatchPage() {
           exit={{ opacity: 0, x: -20 }}
           className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-6 mb-6"
         >
-          <div className="text-sm text-muted-foreground mb-2">
+          <div className="text-sm text-cyan-300 mb-3 font-semibold">
             Question {currentQuestion + 1} / 10
           </div>
-          <div className="text-lg md:text-xl font-medium" data-testid="match-question-text">
+          <div className="text-xl md:text-2xl font-semibold text-white leading-relaxed" data-testid="match-question-text">
             {question.question}
           </div>
         </motion.div>

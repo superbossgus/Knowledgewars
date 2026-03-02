@@ -70,10 +70,10 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold font-space mb-2">
+          <h1 className="text-5xl md:text-6xl font-bold font-space mb-2 text-white" style={{ textShadow: '0 0 20px hsl(180 100% 50%), 0 0 40px hsl(180 100% 50% / 0.5)' }}>
             {t('common.app_name')}
           </h1>
-          <p className="text-muted-foreground">PvP Trivia Real-Time</p>
+          <p className="text-cyan-300 text-lg" style={{ textShadow: '0 0 10px hsl(180 100% 50% / 0.5)' }}>PvP Trivia Real-Time</p>
         </div>
 
         <div className="bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-2xl">

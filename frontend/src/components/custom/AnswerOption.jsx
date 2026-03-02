@@ -76,7 +76,7 @@ export const AnswerOption = ({ label, text, state = 'idle', onSelect, disabled }
       </span>
       
       {/* Answer text */}
-      <span className="text-sm md:text-base font-medium text-white/90">{text}</span>
+      <span className="text-base md:text-lg font-medium text-white">{text}</span>
     </button>
   );
 };
