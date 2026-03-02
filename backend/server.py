@@ -198,6 +198,11 @@ async def login(credentials: UserLogin):
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Get current user profile"""
+    # Update last_seen timestamp
+    users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"last_seen": datetime.utcnow()}}
+    )
     return serialize_doc(current_user)
 
 
@@ -369,6 +374,7 @@ async def get_remaining_duels(current_user: dict = Depends(get_current_user)):
 async def get_top_topics():
     """Get top 10 most used topics"""
     pipeline = [
+        {"$match": {"usage_count": {"$gt": 0}}},  # Only topics that have been actually used
         {"$group": {"_id": "$topic", "count": {"$sum": "$usage_count"}}},
         {"$sort": {"count": -1}},
         {"$limit": 10}
@@ -377,14 +383,15 @@ async def get_top_topics():
     result = list(question_sets_col.aggregate(pipeline))
     topics = [{"topic": doc["_id"], "count": doc["count"]} for doc in result]
     
-    # Add predefined topics if not enough
-    predefined = ["Sports", "History", "Geography", "Science", "Technology", 
-                  "Movies/TV", "Music", "Business/Finance", "Gaming", "General Knowledge"]
-    
-    existing_topics = [t["topic"] for t in topics]
-    for topic in predefined:
-        if topic not in existing_topics and len(topics) < 10:
-            topics.append({"topic": topic, "count": 0})
+    # If we have less than 10, add predefined topics but mark them as suggestions
+    if len(topics) < 10:
+        predefined = ["General Knowledge", "Sports", "History", "Geography", "Science", 
+                      "Technology", "Movies/TV", "Music", "Business/Finance", "Gaming"]
+        
+        existing_topics = [t["topic"] for t in topics]
+        for topic in predefined:
+            if topic not in existing_topics and len(topics) < 10:
+                topics.append({"topic": topic, "count": 0})
     
     return {"topics": topics[:10]}
 
@@ -1092,6 +1099,23 @@ async def get_admin_stats(current_user: dict = Depends(get_current_user)):
         "total_matches": total_matches,
         "premium_users": premium_users,
         "monthly_duels": monthly_duels_count[0]["total"] if monthly_duels_count else 0
+    }
+
+
+@app.delete("/api/admin/test-data")
+async def clear_test_data(current_user: dict = Depends(get_current_user)):
+    """Clear test data from POC phase"""
+    # TODO: Add admin role check
+    
+    # Delete question sets with usage_count = 0 (never used in real matches)
+    result_questions = question_sets_col.delete_many({"usage_count": 0})
+    
+    # Delete test users (you can add specific criteria if needed)
+    # For now, we'll just report counts
+    
+    return {
+        "deleted_question_sets": result_questions.deleted_count,
+        "message": "Test data cleared successfully"
     }
 
 
