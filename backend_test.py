@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 # Public backend URL
-BASE_URL = "https://quiz-duel-5.preview.emergentagent.com"
+BASE_URL = "https://knowledge-wars.preview.emergentagent.com"
 
 class KnowledgeWarsAPITester:
     def __init__(self):
@@ -298,7 +298,7 @@ class KnowledgeWarsAPITester:
         # Test premium subscription checkout
         checkout_data = {
             "product_type": "premium_subscription",
-            "origin_url": "https://quiz-duel-5.preview.emergentagent.com"
+            "origin_url": "https://knowledge-wars.preview.emergentagent.com"
         }
         
         success, error, data = self.test_endpoint(
