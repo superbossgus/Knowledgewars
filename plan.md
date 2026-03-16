@@ -114,14 +114,51 @@ Phase 2 User Stories
 - Ads: AdMob (nativo) o AdSense (web) cuando se habilite
 - Anti-cheat avanzada, Observabilidad (traces/metrics), PWA install prompts, offline cache for static assets
 
-## 3) Status: ✅ MVP COMPLETED & DEPLOYMENT READY
+## 3) Status: 🔄 BRAND IDENTITY REDESIGN IN PROGRESS
 
 **Phase 1 POC:** ✅ All core tests passed (OpenAI, WebSocket, Stripe, ELO)
 **Phase 2 Main App:** ✅ Full implementation completed
 **Phase 2 Testing:** ✅ 100% success rate (20/20 tests passed)
 **Deployment Check:** ✅ PASS - Ready for Kubernetes deployment
 
-All features implemented, tested, and optimized for production.
+---
+
+### Phase 4: Brand Identity Implementation (Status: In Progress)
+
+**Official Brand Manual Colors:**
+- Azul Energía: #0066FF
+- Naranja Guerra: #FF6A00
+- Oro Escudo: #F2B705
+- Negro: #0D0D0D
+- Blanco: #FFFFFF
+
+**Typography:**
+- Principal: Montserrat ExtraBold
+- Secundaria: Inter Regular / Medium
+
+**UI Guidelines:**
+- Dark backgrounds with blue-to-orange gradients
+- Orange primary buttons
+- Gold ranking elements
+- Modern competitive gaming aesthetic
+
+**Tasks:**
+- [ ] Update color tokens in index.css (replace cyan/magenta with blue/orange)
+- [ ] Update typography to Montserrat + Inter
+- [ ] Update App.css gradients and button styles
+- [ ] Update all page components with new brand colors
+- [ ] Test all screens for visual consistency
+
+### Phase 5: Push Notifications (FCM/APNs) (Status: Not Started)
+
+**Objective:** Replace unreliable polling with real-time push notifications
+
+**Tasks:**
+- [ ] Get integration playbook for FCM
+- [ ] Implement backend notification service
+- [ ] Configure Firebase project
+- [ ] Implement frontend notification handling
+- [ ] Test end-to-end notification flow
 
 ## 4) Success Criteria
 - POC: All core tests pass; valid cached question sets in 3 languages; WS duel loop deterministic; Stripe checkout + webhook updates DB
