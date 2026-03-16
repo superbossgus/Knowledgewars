@@ -2,92 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Figtree:wght@400;500;600&display=swap');
+/* Knowledge Wars Official Brand Identity - Manual v1.0 */
+/* Typography: Montserrat ExtraBold (headings) + Inter (body) */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
 @layer base {
   :root {
+    /* Official Brand Colors from Manual */
+    --brand-blue: 220 100% 50%; /* #0066FF - Azul Energía */
+    --brand-orange: 25 100% 50%; /* #FF6A00 - Naranja Guerra */
+    --brand-gold: 45 92% 48%; /* #F2B705 - Oro Escudo */
+    --brand-black: 0 0% 5%; /* #0D0D0D - Negro */
+    --brand-white: 0 0% 100%; /* #FFFFFF - Blanco */
+    
     --background: 0 0% 100%;
-    --foreground: 210 10% 10%;
+    --foreground: 0 0% 5%;
     --card: 0 0% 100%;
-    --card-foreground: 210 10% 10%;
+    --card-foreground: 0 0% 5%;
     --popover: 0 0% 100%;
-    --popover-foreground: 210 10% 10%;
-    --primary: 173 85% 34%;
-    --primary-foreground: 0 0% 98%;
+    --popover-foreground: 0 0% 5%;
+    --primary: 220 100% 50%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 200 8% 94%;
-    --secondary-foreground: 210 10% 15%;
-    --accent: 167 92% 38%;
+    --secondary-foreground: 0 0% 15%;
+    --accent: 25 100% 50%;
     --accent-foreground: 0 0% 100%;
     --muted: 210 12% 96%;
     --muted-foreground: 210 8% 40%;
-    --destructive: 8 78% 54%;
+    --destructive: 0 78% 54%;
     --destructive-foreground: 0 0% 98%;
     --border: 210 14% 90%;
     --input: 210 14% 90%;
-    --ring: 173 85% 34%;
-    --chart-1: 173 80% 40%;
-    --chart-2: 96 74% 40%;
-    --chart-3: 12 86% 56%;
-    --chart-4: 197 100% 35%;
-    --chart-5: 45 92% 52%;
+    --ring: 220 100% 50%;
     --radius: 0.8rem;
     --btn-radius: 0.9rem;
-    --btn-shadow: 0 10px 30px -10px hsla(173,85%,45%,.45);
     --btn-motion: 150ms cubic-bezier(.22,1,.36,1);
   }
 
   .dark {
-    /* Neon Cyberpunk Theme */
-    --background: 220 25% 6%;
-    --foreground: 180 100% 95%;
+    /* Knowledge Wars Official Dark Theme */
+    /* Based on brand manual: dark backgrounds with blue-orange accents */
+    --background: 220 30% 6%; /* Near #0D0D0D */
+    --foreground: 0 0% 98%; /* Near white */
     --card: 220 28% 8%;
-    --card-foreground: 180 100% 95%;
+    --card-foreground: 0 0% 98%;
     --popover: 220 28% 8%;
-    --popover-foreground: 180 100% 95%;
+    --popover-foreground: 0 0% 98%;
     
-    /* Neon Cyan Primary */
-    --primary: 180 100% 50%;
-    --primary-foreground: 220 25% 6%;
+    /* Primary: Azul Energía #0066FF */
+    --primary: 220 100% 50%;
+    --primary-foreground: 0 0% 100%;
     
-    /* Dark secondary */
+    /* Secondary: Dark variant */
     --secondary: 220 22% 12%;
-    --secondary-foreground: 180 100% 95%;
+    --secondary-foreground: 0 0% 98%;
     
-    /* Neon Lime Accent */
-    --accent: 85 100% 55%;
-    --accent-foreground: 220 25% 6%;
+    /* Accent: Naranja Guerra #FF6A00 */
+    --accent: 25 100% 50%;
+    --accent-foreground: 0 0% 100%;
     
-    /* Neon Pink/Magenta */
-    --neon-pink: 320 100% 60%;
-    --neon-orange: 25 100% 55%;
-    --neon-green: 140 100% 50%;
-    --neon-red: 0 100% 60%;
-    --neon-purple: 280 100% 65%;
+    /* Gold for rankings */
+    --gold: 45 92% 48%;
+    --gold-foreground: 0 0% 5%;
     
     --muted: 220 20% 14%;
-    --muted-foreground: 210 10% 55%;
-    --destructive: 0 100% 60%;
+    --muted-foreground: 210 10% 65%;
+    --destructive: 0 78% 54%;
     --destructive-foreground: 0 0% 98%;
     --border: 220 18% 18%;
     --input: 220 18% 18%;
-    --ring: 180 100% 50%;
+    --ring: 220 100% 50%;
     
-    /* Neon glow values */
-    --glow-cyan: 0 0 20px hsl(180 100% 50% / 0.5), 0 0 40px hsl(180 100% 50% / 0.3);
-    --glow-pink: 0 0 20px hsl(320 100% 60% / 0.5), 0 0 40px hsl(320 100% 60% / 0.3);
-    --glow-lime: 0 0 20px hsl(85 100% 55% / 0.5), 0 0 40px hsl(85 100% 55% / 0.3);
-    --glow-orange: 0 0 20px hsl(25 100% 55% / 0.5), 0 0 40px hsl(25 100% 55% / 0.3);
+    /* Glow effects for gaming aesthetic */
+    --glow-blue: 0 0 20px hsl(220 100% 50% / 0.5), 0 0 40px hsl(220 100% 50% / 0.3);
+    --glow-orange: 0 0 20px hsl(25 100% 50% / 0.5), 0 0 40px hsl(25 100% 50% / 0.3);
+    --glow-gold: 0 0 20px hsl(45 92% 48% / 0.5), 0 0 40px hsl(45 92% 48% / 0.3);
     --glow-green: 0 0 20px hsl(140 100% 50% / 0.5), 0 0 40px hsl(140 100% 50% / 0.3);
     --glow-red: 0 0 20px hsl(0 100% 60% / 0.5), 0 0 40px hsl(0 100% 60% / 0.3);
   }
 
-  /* League colors */
+  /* League colors - Official ranking system */
   .league-bronce { --league-color: 28 65% 46%; }
   .league-plata { --league-color: 214 10% 76%; }
   .league-oro { --league-color: 45 92% 54%; }
-  .league-diamante { --league-color: 173 85% 55%; }
-  .league-maestro { --league-color: 197 100% 54%; }
-  .league-gran_maestro { --league-color: 96 86% 56%; }
+  .league-diamante { --league-color: 200 100% 55%; }
+  .league-maestro { --league-color: 220 100% 60%; }
+  .league-gran_maestro { --league-color: 25 100% 55%; }
 }
 
 @layer base {
@@ -97,7 +97,7 @@
   
   body {
     @apply bg-background text-foreground;
-    font-family: 'Figtree', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
   }
   
   html {
@@ -105,25 +105,25 @@
   }
 }
 
-/* Utility classes */
-.font-space {
-  font-family: 'Space Grotesk', sans-serif;
+/* Typography utility classes - Brand Manual */
+.font-brand {
+  font-family: 'Montserrat', sans-serif;
 }
 
-.font-figtree {
-  font-family: 'Figtree', system-ui, sans-serif;
+.font-body {
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
 .numeral {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-/* Noise overlay */
+/* Noise overlay for texture */
 .noise-overlay {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="4" stitchTiles="stitch" /></filter><rect width="100%" height="100%" filter="url(%23n)" opacity=".035"/></svg>');
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="4" stitchTiles="stitch" /></filter><rect width="100%" height="100%" filter="url(%23n)" opacity=".03"/></svg>');
 }
 
 /* Animations */
@@ -146,35 +146,22 @@
   80% { transform: translateX(2px); }
 }
 
-@keyframes neon-pulse {
+@keyframes pulse-glow {
   0%, 100% {
     box-shadow: 
-      0 0 10px hsl(180 100% 50% / 0.3),
-      0 0 20px hsl(180 100% 50% / 0.2),
-      0 0 30px hsl(180 100% 50% / 0.1);
+      0 0 10px hsl(220 100% 50% / 0.3),
+      0 0 20px hsl(220 100% 50% / 0.2);
   }
   50% {
     box-shadow: 
-      0 0 20px hsl(180 100% 50% / 0.5),
-      0 0 40px hsl(180 100% 50% / 0.3),
-      0 0 60px hsl(180 100% 50% / 0.2);
+      0 0 20px hsl(220 100% 50% / 0.5),
+      0 0 40px hsl(220 100% 50% / 0.3);
   }
 }
 
-@keyframes neon-flicker {
+@keyframes glow-pulse {
   0%, 100% { opacity: 1; }
-  25% { opacity: 0.8; }
-  50% { opacity: 1; }
-  75% { opacity: 0.9; }
-}
-
-@keyframes glow-rotate {
-  0% {
-    filter: hue-rotate(0deg);
-  }
-  100% {
-    filter: hue-rotate(360deg);
-  }
+  50% { opacity: 0.7; }
 }
 
 @keyframes float {

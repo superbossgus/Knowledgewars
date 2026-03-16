@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/store';
 import { EloBadge } from '../components/custom/EloBadge';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { Swords, Trophy, Flame, Crown, LogOut } from 'lucide-react';
+import { Swords, Trophy, Flame, Crown, LogOut, Shield, Target, Zap } from 'lucide-react';
 
 export default function HomePage() {
   const { t } = useTranslation();
@@ -55,15 +55,15 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>{t('common.loading')}</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[hsl(220,100%,50%)] mx-auto mb-4"></div>
+          <p className="text-white">{t('common.loading')}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen p-4 md:p-6 lg:p-8 relative z-10">
       <div className="container mx-auto max-w-7xl">
         {/* Header */}
         <motion.div
@@ -71,21 +71,26 @@ export default function HomePage() {
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center justify-between mb-8"
         >
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold font-space mb-1">
-              {t('common.app_name')}
-            </h1>
-            <p className="text-muted-foreground">Welcome back, {user?.display_name}!</p>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Shield className="w-8 h-8 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 8px hsl(220 100% 50%))' }} />
+              <div>
+                <h1 className="text-2xl md:text-3xl font-extrabold font-brand text-white">
+                  KNOWLEDGE <span className="text-[hsl(25,100%,50%)]">WARS</span>
+                </h1>
+                <p className="text-sm text-muted-foreground">Welcome back, <span className="text-[hsl(220,100%,70%)] font-semibold">{user?.display_name}</span>!</p>
+              </div>
+            </div>
           </div>
           
           <div className="flex items-center gap-3">
             <EloBadge tier={user?.league || 'bronce'} />
             <button
               onClick={handleLogout}
-              className="p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+              className="p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-all border border-[hsl(220,100%,50%,0.2)] hover:border-[hsl(220,100%,50%,0.4)]"
               title={t('auth.logout')}
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-5 h-5 text-white" />
             </button>
           </div>
         </motion.div>
@@ -97,23 +102,24 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.1 }}
-            className="xl:col-span-2 bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 md:p-8 relative overflow-hidden group"
+            className="xl:col-span-2 bg-card/60 backdrop-blur-xl border-2 border-[hsl(25,100%,50%,0.3)] rounded-2xl p-6 md:p-8 relative overflow-hidden group"
+            style={{ boxShadow: '0 0 30px hsl(25 100% 50% / 0.1)' }}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-gradient-to-br from-[hsl(25,100%,50%,0.1)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-4">
-                <Swords className="w-8 h-8 text-primary" />
-                <h2 className="text-2xl font-bold font-space">{t('home.play_random')}</h2>
+                <Swords className="w-10 h-10 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 10px hsl(25 100% 50%))' }} />
+                <h2 className="text-2xl font-bold font-brand text-white">{t('home.play_random')}</h2>
               </div>
-              <p className="text-muted-foreground mb-6">
+              <p className="text-muted-foreground mb-6 text-lg">
                 Challenge a random opponent and prove your knowledge!
               </p>
               <button
                 onClick={handlePlayRandom}
-                className="btn-primary text-lg px-8 py-4 w-full md:w-auto"
+                className="btn-primary text-lg px-10 py-4 w-full md:w-auto"
                 data-testid="play-random-button"
               >
-                <Flame className="w-5 h-5 mr-2 inline" />
+                <Zap className="w-5 h-5 mr-2 inline" />
                 {t('common.play')}
               </button>
             </div>
@@ -124,24 +130,25 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
-            className="bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6"
+            className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
+            style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
             data-testid="duels-remaining-chip"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Trophy className="w-5 h-5 text-accent" />
-              <h3 className="font-semibold">{t('home.duels_remaining')}</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="w-6 h-6 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
+              <h3 className="font-bold text-white text-lg">{t('home.duels_remaining')}</h3>
             </div>
-            <div className="text-3xl font-bold font-space mb-2">
+            <div className="text-4xl font-extrabold font-brand mb-3">
               {duelsRemaining?.unlimited ? (
-                <span className="text-primary">{t('home.unlimited')}</span>
+                <span className="text-[hsl(45,92%,48%)] gold-accent">{t('home.unlimited')}</span>
               ) : (
-                <span>{duelsRemaining?.remaining || 0}</span>
+                <span className="text-white">{duelsRemaining?.remaining || 0}</span>
               )}
             </div>
             {!duelsRemaining?.unlimited && (
-              <div className="w-full bg-muted/30 rounded-full h-2">
+              <div className="w-full bg-muted/30 rounded-full h-3 overflow-hidden">
                 <div
-                  className="bg-primary h-2 rounded-full transition-all"
+                  className="h-3 rounded-full transition-all progress-bar"
                   style={{ width: `${((duelsRemaining?.remaining || 0) / (duelsRemaining?.limit || 100)) * 100}%` }}
                 />
               </div>
@@ -153,16 +160,17 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3 }}
-            className="bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6"
+            className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(45,92%,48%,0.3)] rounded-2xl p-6"
+            style={{ boxShadow: '0 0 20px hsl(45 92% 48% / 0.1)' }}
             data-testid="premium-status-card"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Crown className="w-5 h-5 text-accent" />
-              <h3 className="font-semibold">{t('home.premium_status')}</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Crown className="w-6 h-6 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
+              <h3 className="font-bold text-white text-lg">{t('home.premium_status')}</h3>
             </div>
             <div className="mb-4">
               {user?.premium_status ? (
-                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-accent/20 text-accent text-sm font-semibold">
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[hsl(45,92%,48%,0.2)] text-[hsl(45,92%,48%)] text-sm font-bold border border-[hsl(45,92%,48%,0.4)]">
                   <Crown className="w-4 h-4" />
                   Premium Active
                 </span>
@@ -173,7 +181,7 @@ export default function HomePage() {
             {!user?.premium_status && (
               <button
                 onClick={() => navigate('/premium')}
-                className="text-sm text-primary hover:underline"
+                className="text-sm text-[hsl(45,92%,48%)] hover:underline font-semibold"
               >
                 Upgrade Now →
               </button>
@@ -185,18 +193,19 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.4 }}
-            className="xl:col-span-2 bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6"
+            className="xl:col-span-2 bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
+            style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
           >
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <Flame className="w-5 h-5 text-accent" />
+            <h3 className="font-bold mb-4 flex items-center gap-2 text-white text-lg">
+              <Flame className="w-6 h-6 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
               {t('home.top_topics')}
             </h3>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {topTopics.slice(0, 6).map((topic) => (
                 <button
                   key={topic.topic}
                   onClick={() => navigate('/lobby', { state: { topic: topic.topic } })}
-                  className="text-left px-3 py-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-sm"
+                  className="text-left px-4 py-3 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.15)] border border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all text-sm font-medium text-white"
                 >
                   {topic.topic}
                 </button>
@@ -209,23 +218,24 @@ export default function HomePage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.5 }}
-            className="xl:col-span-2 bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl p-6"
+            className="xl:col-span-2 bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
+            style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
           >
-            <h3 className="font-semibold mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <h3 className="font-bold mb-4 text-white text-lg">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => navigate('/rankings')}
-                className="p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-center"
+                className="p-5 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.15)] border border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all text-center"
               >
-                <Trophy className="w-6 h-6 mx-auto mb-2 text-primary" />
-                <span className="text-sm font-medium">Rankings</span>
+                <Trophy className="w-8 h-8 mx-auto mb-2 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(220 100% 50%))' }} />
+                <span className="text-sm font-bold text-white">Rankings</span>
               </button>
               <button
-                onClick={() => navigate('/profile')}
-                className="p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-center"
+                onClick={() => navigate('/premium')}
+                className="p-5 rounded-xl bg-muted/30 hover:bg-[hsl(45,92%,48%,0.15)] border border-transparent hover:border-[hsl(45,92%,48%,0.3)] transition-all text-center"
               >
-                <Crown className="w-6 h-6 mx-auto mb-2 text-accent" />
-                <span className="text-sm font-medium">Profile</span>
+                <Crown className="w-8 h-8 mx-auto mb-2 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
+                <span className="text-sm font-bold text-white">Premium</span>
               </button>
             </div>
           </motion.div>

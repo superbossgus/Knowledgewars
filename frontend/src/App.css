@@ -1,14 +1,18 @@
+/* Knowledge Wars - Official Brand Styles */
+/* Based on Manual de Identidad Visual v1.0 */
+
 .App {
   min-height: 100vh;
+  /* Official gradient: dark with blue-orange accents */
   background: 
-    radial-gradient(ellipse at 20% 30%, hsl(180 100% 15% / 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 70%, hsl(320 100% 15% / 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, hsl(280 100% 10% / 0.1) 0%, transparent 70%),
-    linear-gradient(180deg, hsl(220, 25%, 6%) 0%, hsl(220, 28%, 8%) 100%);
+    radial-gradient(ellipse at 20% 30%, hsl(220 100% 50% / 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 70%, hsl(25 100% 50% / 0.10) 0%, transparent 50%),
+    linear-gradient(135deg, hsl(220 30% 6%) 0%, hsl(220 28% 10%) 50%, hsl(220 30% 6%) 100%);
   position: relative;
   overflow-x: hidden;
 }
 
+/* Subtle grid pattern overlay */
 .App::before {
   content: '';
   position: fixed;
@@ -19,56 +23,47 @@
   background: 
     repeating-linear-gradient(
       90deg,
-      hsl(180 100% 50% / 0.03) 0px,
+      hsl(220 100% 50% / 0.02) 0px,
       transparent 1px,
-      transparent 40px,
-      hsl(180 100% 50% / 0.03) 41px
+      transparent 50px,
+      hsl(220 100% 50% / 0.02) 51px
     ),
     repeating-linear-gradient(
       0deg,
-      hsl(320 100% 60% / 0.02) 0px,
+      hsl(25 100% 50% / 0.015) 0px,
       transparent 1px,
-      transparent 40px,
-      hsl(320 100% 60% / 0.02) 41px
+      transparent 50px,
+      hsl(25 100% 50% / 0.015) 51px
     );
   pointer-events: none;
   z-index: 1;
 }
 
-/* Hero gradients */
+/* Hero gradients - max 20% viewport per guidelines */
 .hero-gradient {
   background: 
-    radial-gradient(ellipse at 20% 30%, hsl(180 100% 15% / 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 70%, hsl(320 100% 15% / 0.15) 0%, transparent 50%),
-    linear-gradient(180deg, hsl(220, 25%, 6%) 0%, hsl(220, 28%, 8%) 100%);
+    radial-gradient(ellipse at 30% 20%, hsl(220 100% 50% / 0.15) 0%, transparent 40%),
+    radial-gradient(ellipse at 70% 80%, hsl(25 100% 50% / 0.12) 0%, transparent 40%),
+    linear-gradient(180deg, hsl(220 30% 6%) 0%, hsl(220 28% 8%) 100%);
 }
 
-.cta-glow {
-  background: linear-gradient(135deg, hsl(180, 100%, 50%) 0%, hsl(180, 100%, 40%) 100%);
-  box-shadow: var(--glow-cyan);
-}
-
-.accent-strip {
-  background: linear-gradient(90deg, hsl(85, 100%, 55%) 0%, hsl(140, 100%, 50%) 100%);
-}
-
-/* Neon Button styles */
+/* Primary Button - Naranja Guerra #FF6A00 */
 .btn-primary {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--btn-radius);
-  background: linear-gradient(135deg, hsl(180, 100%, 50%) 0%, hsl(180, 100%, 45%) 100%);
-  color: hsl(220, 25%, 6%);
-  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, hsl(25 100% 50%) 0%, hsl(25 100% 45%) 100%);
+  color: white;
+  padding: 0.75rem 1.5rem;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  box-shadow: var(--glow-cyan);
-  border: 2px solid hsl(180 100% 60%);
-  transition: all var(--btn-motion);
+  box-shadow: var(--glow-orange);
+  border: 2px solid hsl(25 100% 55%);
+  transition: transform var(--btn-motion), box-shadow var(--btn-motion), background var(--btn-motion);
 }
 
 .btn-primary::before {
@@ -77,20 +72,20 @@
   inset: -2px;
   border-radius: var(--btn-radius);
   padding: 2px;
-  background: linear-gradient(135deg, hsl(180 100% 60%), hsl(180 100% 40%));
+  background: linear-gradient(135deg, hsl(25 100% 60%), hsl(45 92% 50%));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, hsl(180, 100%, 55%) 0%, hsl(180, 100%, 50%) 100%);
+  background: linear-gradient(135deg, hsl(25 100% 55%) 0%, hsl(25 100% 50%) 100%);
   box-shadow: 
-    var(--glow-cyan),
-    0 0 30px hsl(180 100% 50% / 0.4),
-    inset 0 0 20px hsl(180 100% 50% / 0.2);
+    var(--glow-orange),
+    0 0 30px hsl(25 100% 50% / 0.4),
+    inset 0 0 20px hsl(25 100% 50% / 0.2);
   transform: translateY(-2px);
 }
 
@@ -98,105 +93,78 @@
   transform: translateY(0) scale(0.98);
 }
 
+/* Secondary Button - Blue glass style */
 .btn-secondary-glass {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--btn-radius);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 102, 255, 0.1);
   backdrop-filter: blur(12px);
-  border: 2px solid hsl(180 100% 50% / 0.3);
-  color: hsl(180, 100%, 85%);
-  padding: 0.75rem 1.25rem;
+  border: 2px solid hsl(220 100% 50% / 0.4);
+  color: hsl(220 100% 80%);
+  padding: 0.75rem 1.5rem;
   font-weight: 600;
-  transition: all var(--btn-motion);
-  box-shadow: 0 0 15px hsl(180 100% 50% / 0.15);
+  font-family: 'Montserrat', sans-serif;
+  transition: transform var(--btn-motion), box-shadow var(--btn-motion), background var(--btn-motion), border-color var(--btn-motion);
+  box-shadow: 0 0 15px hsl(220 100% 50% / 0.2);
 }
 
 .btn-secondary-glass:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: hsl(180 100% 50% / 0.6);
-  box-shadow: 0 0 25px hsl(180 100% 50% / 0.3);
+  background: rgba(0, 102, 255, 0.2);
+  border-color: hsl(220 100% 50% / 0.7);
+  box-shadow: 0 0 25px hsl(220 100% 50% / 0.4);
   transform: translateY(-2px);
 }
 
-/* League badge styles */
+/* League badge styles - Gold for rankings */
 .league-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  border-radius: 0.375rem;
-  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.75rem;
   font-size: 11px;
-  font-weight: 600;
-  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-family: 'Montserrat', sans-serif;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 15px -4px rgba(0, 0, 0, 0.4);
 }
 
-/* Answer option animations with neon glow */
+/* Answer option styles */
 .answer-option {
   position: relative;
   border-radius: 0.75rem;
-  border: 2px solid rgba(180, 255, 255, 0.2);
-  background: linear-gradient(135deg, rgba(180, 255, 255, 0.05) 0%, rgba(180, 255, 255, 0.02) 100%);
-  padding: 0.75rem 1rem;
+  border: 2px solid hsl(220 100% 50% / 0.3);
+  background: linear-gradient(135deg, hsl(220 100% 50% / 0.08) 0%, hsl(220 100% 50% / 0.03) 100%);
+  padding: 0.875rem 1rem;
   text-align: left;
   cursor: pointer;
   user-select: none;
-  transition: all 200ms ease;
-  box-shadow: 0 0 10px rgba(180, 255, 255, 0.1);
-}
-
-.answer-option::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 0.75rem;
-  padding: 2px;
-  background: linear-gradient(135deg, hsl(180 100% 50% / 0.3), hsl(140 100% 50% / 0.2));
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-
-.answer-option:hover:not(:disabled)::before {
-  opacity: 1;
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
+  box-shadow: 0 0 10px hsl(220 100% 50% / 0.1);
 }
 
 .answer-option:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(180, 255, 255, 0.1) 0%, rgba(180, 255, 255, 0.05) 100%);
-  border-color: rgba(180, 255, 255, 0.4);
-  box-shadow: 0 0 20px rgba(180, 255, 255, 0.3);
+  background: linear-gradient(135deg, hsl(220 100% 50% / 0.15) 0%, hsl(220 100% 50% / 0.08) 100%);
+  border-color: hsl(220 100% 50% / 0.6);
+  box-shadow: 0 0 20px hsl(220 100% 50% / 0.3);
   transform: translateY(-2px);
 }
 
 .answer-option.correct {
-  border-color: hsl(140, 100%, 50%);
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.2) 0%, rgba(52, 211, 153, 0.1) 100%);
+  border-color: hsl(140 100% 45%);
+  background: linear-gradient(135deg, hsl(140 100% 45% / 0.2) 0%, hsl(140 100% 45% / 0.1) 100%);
   box-shadow: var(--glow-green);
 }
 
-.answer-option.correct::before {
-  background: linear-gradient(135deg, hsl(140 100% 50%), hsl(140 100% 40%));
-  opacity: 0.8;
-}
-
 .answer-option.wrong {
-  border-color: hsl(0, 100%, 60%);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%);
+  border-color: hsl(0 100% 55%);
+  background: linear-gradient(135deg, hsl(0 100% 55% / 0.15) 0%, hsl(0 100% 55% / 0.05) 100%);
   box-shadow: var(--glow-red);
-  animation: shake 0.4s linear, neon-flicker 0.3s ease-in-out;
-}
-
-.answer-option.wrong::before {
-  background: linear-gradient(135deg, hsl(0 100% 60%), hsl(0 100% 50%));
-  opacity: 0.7;
+  animation: shake 0.4s linear;
 }
 
 /* Timer ring */
@@ -206,7 +174,7 @@
   height: 6rem;
 }
 
-/* Scoreboard with neon effects */
+/* Scoreboard with brand styling */
 .scoreboard {
   position: sticky;
   top: 0;
@@ -214,35 +182,20 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
-  border-radius: 0.75rem;
-  border: 2px solid hsl(180 100% 50% / 0.3);
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.4) 100%);
+  border-radius: 1rem;
+  border: 2px solid hsl(220 100% 50% / 0.3);
+  background: linear-gradient(135deg, rgba(0, 10, 30, 0.8) 0%, rgba(0, 10, 30, 0.6) 100%);
   backdrop-filter: blur(16px);
-  padding: 0.5rem;
+  padding: 0.75rem;
   box-shadow: 
-    0 0 20px hsl(180 100% 50% / 0.2),
-    inset 0 0 20px rgba(180, 255, 255, 0.05);
-}
-
-.scoreboard::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 0.75rem;
-  padding: 2px;
-  background: linear-gradient(135deg, hsl(180 100% 50% / 0.4), hsl(320 100% 60% / 0.4));
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  animation: glow-rotate 4s linear infinite;
+    0 0 30px hsl(220 100% 50% / 0.15),
+    inset 0 0 20px hsl(220 100% 50% / 0.05);
 }
 
 /* Loading skeleton */
 .skeleton {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  background: linear-gradient(90deg, hsl(222, 20%, 18%) 25%, hsl(222, 18%, 22%) 50%, hsl(222, 20%, 18%) 75%);
+  background: linear-gradient(90deg, hsl(220 20% 12%) 25%, hsl(220 18% 16%) 50%, hsl(220 20% 12%) 75%);
   background-size: 200% 100%;
 }
 
@@ -277,4 +230,24 @@
     padding-left: 2rem;
     padding-right: 2rem;
   }
+}
+
+/* Brand title glow effect - Azul Energía */
+.brand-title {
+  text-shadow: 
+    0 0 20px hsl(220 100% 50%),
+    0 0 40px hsl(220 100% 50% / 0.5),
+    0 0 60px hsl(220 100% 50% / 0.3);
+}
+
+/* Gold accent for rankings and special elements */
+.gold-accent {
+  color: hsl(45 92% 48%);
+  text-shadow: 0 0 10px hsl(45 92% 48% / 0.5);
+}
+
+/* Progress bar styling */
+.progress-bar {
+  background: linear-gradient(90deg, hsl(220 100% 50%) 0%, hsl(25 100% 50%) 100%);
+  box-shadow: 0 0 10px hsl(220 100% 50% / 0.5);
 }

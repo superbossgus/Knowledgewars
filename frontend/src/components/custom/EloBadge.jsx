@@ -1,66 +1,73 @@
 import React from 'react';
-import { Trophy, Shield, Award, Crown, Gem, Zap } from 'lucide-react';
+import { Shield, Award, Star, Diamond, Crown, Gem } from 'lucide-react';
 
-const LEAGUE_MAP = {
-  bronce: { 
-    color: '28 65% 46%', 
-    glow: '0 0 15px hsl(28 65% 46% / 0.5), 0 0 30px hsl(28 65% 46% / 0.3)',
-    icon: Shield 
+// Official league colors from brand manual
+const leagueConfig = {
+  bronce: {
+    color: 'hsl(28, 65%, 46%)',
+    bg: 'hsl(28, 65%, 46%, 0.2)',
+    border: 'hsl(28, 65%, 46%, 0.5)',
+    icon: Shield,
+    label: 'Bronce'
   },
-  plata: { 
-    color: '214 10% 76%', 
-    glow: '0 0 15px hsl(214 10% 76% / 0.6), 0 0 30px hsl(214 10% 76% / 0.4)',
-    icon: Award 
+  plata: {
+    color: 'hsl(214, 10%, 76%)',
+    bg: 'hsl(214, 10%, 76%, 0.2)',
+    border: 'hsl(214, 10%, 76%, 0.5)',
+    icon: Award,
+    label: 'Plata'
   },
-  oro: { 
-    color: '45 92% 54%', 
-    glow: '0 0 15px hsl(45 92% 54% / 0.6), 0 0 30px hsl(45 92% 54% / 0.4)',
-    icon: Trophy 
+  oro: {
+    color: 'hsl(45, 92%, 48%)', // Oro Escudo #F2B705
+    bg: 'hsl(45, 92%, 48%, 0.2)',
+    border: 'hsl(45, 92%, 48%, 0.5)',
+    icon: Star,
+    label: 'Oro'
   },
-  diamante: { 
-    color: '180 100% 55%', 
-    glow: '0 0 15px hsl(180 100% 55% / 0.6), 0 0 30px hsl(180 100% 55% / 0.4)',
-    icon: Gem 
+  diamante: {
+    color: 'hsl(200, 100%, 55%)',
+    bg: 'hsl(200, 100%, 55%, 0.2)',
+    border: 'hsl(200, 100%, 55%, 0.5)',
+    icon: Diamond,
+    label: 'Diamante'
   },
-  maestro: { 
-    color: '280 100% 65%', 
-    glow: '0 0 15px hsl(280 100% 65% / 0.6), 0 0 30px hsl(280 100% 65% / 0.4)',
-    icon: Crown 
+  maestro: {
+    color: 'hsl(220, 100%, 60%)', // Azul Energía variant
+    bg: 'hsl(220, 100%, 60%, 0.2)',
+    border: 'hsl(220, 100%, 60%, 0.5)',
+    icon: Crown,
+    label: 'Maestro'
   },
-  gran_maestro: { 
-    color: '85 100% 56%', 
-    glow: '0 0 15px hsl(85 100% 56% / 0.7), 0 0 30px hsl(85 100% 56% / 0.5), 0 0 45px hsl(85 100% 56% / 0.3)',
-    icon: Zap 
-  },
+  gran_maestro: {
+    color: 'hsl(25, 100%, 55%)', // Naranja Guerra variant
+    bg: 'hsl(25, 100%, 55%, 0.2)',
+    border: 'hsl(25, 100%, 55%, 0.5)',
+    icon: Gem,
+    label: 'Gran Maestro'
+  }
 };
 
-export const EloBadge = ({ tier = 'bronce', showIcon = true }) => {
-  const config = LEAGUE_MAP[tier] || LEAGUE_MAP.bronce;
+export const EloBadge = ({ tier = 'bronce', showLabel = true }) => {
+  const config = leagueConfig[tier] || leagueConfig.bronce;
   const Icon = config.icon;
-
+  
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider font-space border-2 relative"
+      className="league-badge"
       style={{
-        background: `linear-gradient(135deg, hsl(${config.color}) 0%, hsl(${config.color} / 0.7) 100%)`,
-        color: 'hsl(220, 25%, 6%)',
-        borderColor: `hsl(${config.color})`,
-        boxShadow: config.glow,
+        background: config.bg,
+        borderColor: config.border,
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        color: config.color,
+        boxShadow: `0 0 15px ${config.color.replace(')', ', 0.3)')}`
       }}
       data-testid="elo-badge"
     >
-      {/* Inner glow */}
-      <div 
-        className="absolute inset-0 rounded-lg opacity-30 pointer-events-none"
-        style={{
-          background: `radial-gradient(circle at center, hsl(${config.color}) 0%, transparent 70%)`,
-        }}
-      />
-      
-      {showIcon && <Icon className="w-3.5 h-3.5 relative z-10" style={{ filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.5))' }} />}
-      <span className="relative z-10" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>
-        {tier.replace('_', ' ')}
-      </span>
+      <Icon className="w-4 h-4" style={{ filter: `drop-shadow(0 0 4px ${config.color})` }} />
+      {showLabel && <span>{config.label}</span>}
     </span>
   );
 };
+
+export default EloBadge;
