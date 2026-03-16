@@ -26,14 +26,33 @@
             /* Hide Emergent badge */
             #emergent-badge,
             [id*="emergent-badge"],
-            a[href*="emergent"] {
+            a[href*="emergent.sh"][style*="position: fixed"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
+                width: 0 !important;
+                height: 0 !important;
             }
         </style>
-        <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
+        <script>
+            // Remove Emergent badge when it appears
+            window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);
+            
+            // Observer to remove dynamically injected badge
+            const badgeObserver = new MutationObserver(function(mutations) {
+                const badge = document.getElementById('emergent-badge') || document.querySelector('a[href*="emergent.sh"]');
+                if (badge) {
+                    badge.remove();
+                }
+            });
+            document.addEventListener('DOMContentLoaded', function() {
+                badgeObserver.observe(document.body, { childList: true, subtree: true });
+                // Also check immediately
+                const badge = document.getElementById('emergent-badge') || document.querySelector('a[href*="emergent.sh"]');
+                if (badge) badge.remove();
+            });
+        </script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
         <!--
         These two scripts have been added for the Visual Edits, please do not edit or remove them
