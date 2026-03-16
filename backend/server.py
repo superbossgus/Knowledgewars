@@ -179,7 +179,8 @@ async def register(user_data: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create user
+    # Create user with game credits system
+    # New users start with 5 FREE games to try the app
     user_doc = {
         "email": user_data.email,
         "password": hash_password(user_data.password),
@@ -190,13 +191,16 @@ async def register(user_data: UserCreate):
         "dnd_enabled": False,
         "elo_rating": 1200,
         "league": "plata",
-        "premium_status": False,
-        "premium_expiration": None,
         "created_at": datetime.utcnow(),
         "last_seen": datetime.utcnow(),
         "wins": 0,
         "losses": 0,
-        "total_duels": 0
+        "total_duels": 0,
+        "auth_provider": "email",
+        # New monetization system: game credits
+        "games_remaining": 5,  # 5 free games for new users
+        "total_games_purchased": 0,
+        "coupons_used": []  # Track used coupons
     }
     
     result = users_col.insert_one(user_doc)
