@@ -198,7 +198,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-white/20"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-card/60 text-muted-foreground">o</span>
+              <span className="px-4 bg-[hsl(220,28%,10%)] text-muted-foreground">o</span>
             </div>
           </div>
 
