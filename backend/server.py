@@ -294,7 +294,7 @@ async def process_google_session(data: GoogleSessionRequest, response: Response)
             )
             user_id = str(user["_id"])
         else:
-            # Create new user from Google data
+            # Create new user from Google data with game credits
             user_doc = {
                 "email": email,
                 "display_name": name.split()[0] if name else "Player",
@@ -305,14 +305,16 @@ async def process_google_session(data: GoogleSessionRequest, response: Response)
                 "dnd_enabled": False,
                 "elo_rating": 1200,
                 "league": "plata",
-                "premium_status": False,
-                "premium_expiration": None,
                 "created_at": datetime.now(timezone.utc),
                 "last_seen": datetime.now(timezone.utc),
                 "wins": 0,
                 "losses": 0,
                 "total_duels": 0,
-                "auth_provider": "google"
+                "auth_provider": "google",
+                # New monetization system: game credits
+                "games_remaining": 5,  # 5 free games for new users
+                "total_games_purchased": 0,
+                "coupons_used": []
             }
             result = users_col.insert_one(user_doc)
             user = user_doc
