@@ -255,6 +255,15 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 data-testid="login-password-input"
               />
+              {!isRegister && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-sm text-[hsl(220,100%,70%)] hover:text-white mt-2 transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              )}
             </div>
 
             {isRegister && (
