@@ -63,6 +63,8 @@ purchases_col = db["purchases"]
 coupons_col = db["coupons"]
 payment_transactions_col = db["payment_transactions"]
 user_sessions_col = db["user_sessions"]  # For Google OAuth sessions
+password_resets_col = db["password_resets"]  # For password recovery
+admin_users_col = db["admin_users"]  # Admin panel users
 
 # Indexes
 users_col.create_index("email", unique=True)
