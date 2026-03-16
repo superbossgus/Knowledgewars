@@ -75,6 +75,8 @@ matches_col.create_index([("player_b_id", 1), ("status", 1)])
 matches_col.create_index([("status", 1), ("ended_at", DESCENDING)])
 question_sets_col.create_index([("topic_normalized", 1), ("language", 1)])
 match_events_col.create_index([("match_id", 1), ("question_index", 1), ("event_type", 1)])
+user_sessions_col.create_index("session_token", unique=True)
+user_sessions_col.create_index("user_id")
 
 # Services
 EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
