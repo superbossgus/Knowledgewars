@@ -23,35 +23,41 @@
         -->
         <title>Knowledge Wars | PvP Trivia</title>
         <style>
-            /* Hide Emergent badge */
+            /* Hide Emergent badge completely */
             #emergent-badge,
             [id*="emergent-badge"],
-            a[href*="emergent.sh"][style*="position: fixed"] {
+            a[href*="emergent.sh"][style*="position: fixed"],
+            a[href*="utm_source=emergent"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
                 width: 0 !important;
                 height: 0 !important;
+                position: absolute !important;
+                left: -9999px !important;
             }
         </style>
         <script>
-            // Remove Emergent badge when it appears
+            // Remove Emergent badge continuously
             window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);
             
-            // Observer to remove dynamically injected badge
-            const badgeObserver = new MutationObserver(function(mutations) {
-                const badge = document.getElementById('emergent-badge') || document.querySelector('a[href*="emergent.sh"]');
-                if (badge) {
-                    badge.remove();
-                }
-            });
-            document.addEventListener('DOMContentLoaded', function() {
-                badgeObserver.observe(document.body, { childList: true, subtree: true });
-                // Also check immediately
-                const badge = document.getElementById('emergent-badge') || document.querySelector('a[href*="emergent.sh"]');
-                if (badge) badge.remove();
-            });
+            function removeBadge() {
+                const badges = document.querySelectorAll('#emergent-badge, a[href*="emergent.sh"], a[href*="utm_source=emergent"]');
+                badges.forEach(b => b.remove());
+            }
+            
+            // Run immediately and then every 100ms for 5 seconds
+            removeBadge();
+            let count = 0;
+            const interval = setInterval(function() {
+                removeBadge();
+                count++;
+                if (count > 50) clearInterval(interval);
+            }, 100);
+            
+            document.addEventListener('DOMContentLoaded', removeBadge);
+            window.addEventListener('load', removeBadge);
         </script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
         <!--
