@@ -5,14 +5,17 @@ FastAPI backend with WebSocket support for real-time duels
 
 import os
 import asyncio
-from datetime import datetime, timedelta
+import httpx
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient, DESCENDING
 from bson import ObjectId
+from pydantic import BaseModel
 
 from models import (
     UserCreate, UserLogin, UserProfile, MatchCreate, MatchAnswer, MatchHint,
