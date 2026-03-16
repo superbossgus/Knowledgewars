@@ -116,24 +116,49 @@ manager = ConnectionManager()
 
 
 # Authentication dependency
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    """Get current authenticated user"""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    session_token: Optional[str] = Cookie(None)
+) -> dict:
+    """Get current authenticated user - supports both JWT and session cookie"""
+    # First try Authorization header (JWT)
+    if authorization:
+        try:
+            token = authorization.replace("Bearer ", "")
+            payload = decode_access_token(token)
+            if payload:
+                user = users_col.find_one({"_id": ObjectId(payload["user_id"])})
+                if user:
+                    return serialize_doc(user)
+        except:
+            pass
     
-    try:
-        token = authorization.replace("Bearer ", "")
-        payload = decode_access_token(token)
-        if not payload:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        user = users_col.find_one({"_id": ObjectId(payload["user_id"])})
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
-        
-        return serialize_doc(user)
-    except:
-        raise HTTPException(status_code=401, detail="Authentication failed")
+    # Then try session cookie (Google OAuth)
+    if session_token:
+        session = user_sessions_col.find_one({"session_token": session_token}, {"_id": 0})
+        if session:
+            # Check expiry with timezone awareness
+            expires_at = session.get("expires_at")
+            if expires_at:
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at)
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if expires_at < datetime.now(timezone.utc):
+                    raise HTTPException(status_code=401, detail="Session expired")
+            
+            # Find user by user_id field
+            user = users_col.find_one({"user_id": session["user_id"]}, {"_id": 0})
+            if not user:
+                # Also try finding by MongoDB _id for backward compatibility
+                try:
+                    user = users_col.find_one({"_id": ObjectId(session["user_id"])})
+                except:
+                    pass
+            if user:
+                return serialize_doc(user)
+    
+    raise HTTPException(status_code=401, detail="Not authenticated")
 
 
 # ============================================================================
