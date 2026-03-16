@@ -195,13 +195,15 @@ function App() {
             }
           />
           <Route
-            path="/premium"
+            path="/store"
             element={
               <ProtectedRoute>
-                <PremiumPage />
+                <StorePage />
               </ProtectedRoute>
             }
           />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/" element={<Navigate to="/home" replace />} />
         </Routes>
         <Toaster position="top-center" richColors />
