@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { EloBadge } from '../components/custom/EloBadge';
 import api from '../lib/api';
-import { ArrowLeft, Trophy, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Trophy, TrendingUp, Shield } from 'lucide-react';
 
 export default function RankingsPage() {
   const { t } = useTranslation();
@@ -32,7 +32,7 @@ export default function RankingsPage() {
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen p-4 md:p-6 lg:p-8 relative z-10">
       <div className="container mx-auto max-w-5xl">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -41,17 +41,19 @@ export default function RankingsPage() {
         >
           <button
             onClick={() => navigate('/home')}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 transition-colors"
+            className="flex items-center gap-2 text-[hsl(220,100%,70%)] hover:text-white mb-4 transition-colors font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Home
           </button>
           
-          <h1 className="text-3xl md:text-4xl font-bold font-space mb-2 flex items-center gap-3">
-            <Trophy className="w-8 h-8 text-accent" />
-            {t('rankings.global')}
-          </h1>
-          <p className="text-muted-foreground">Top players worldwide</p>
+          <div className="flex items-center gap-3 mb-2">
+            <Trophy className="w-10 h-10 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 10px hsl(45 92% 48%))' }} />
+            <h1 className="text-3xl md:text-4xl font-extrabold font-brand text-white">
+              {t('rankings.global')}
+            </h1>
+          </div>
+          <p className="text-muted-foreground font-medium">Top players worldwide</p>
         </motion.div>
 
         {/* Tabs */}
@@ -63,18 +65,24 @@ export default function RankingsPage() {
         >
           <button
             onClick={() => setActiveTab('global')}
-            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-              activeTab === 'global' ? 'bg-primary text-primary-foreground' : 'bg-muted/30 text-muted-foreground'
+            className={`px-6 py-3 rounded-xl font-bold font-brand uppercase tracking-wide transition-all duration-200 ${
+              activeTab === 'global' 
+                ? 'bg-[hsl(220,100%,50%)] text-white shadow-lg' 
+                : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
             }`}
+            style={activeTab === 'global' ? { boxShadow: '0 0 20px hsl(220 100% 50% / 0.5)' } : {}}
             data-testid="leaderboard-tab-global"
           >
             {t('rankings.global')}
           </button>
           <button
             onClick={() => setActiveTab('weekly')}
-            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-              activeTab === 'weekly' ? 'bg-primary text-primary-foreground' : 'bg-muted/30 text-muted-foreground'
+            className={`px-6 py-3 rounded-xl font-bold font-brand uppercase tracking-wide transition-all duration-200 ${
+              activeTab === 'weekly' 
+                ? 'bg-[hsl(25,100%,50%)] text-white shadow-lg' 
+                : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
             }`}
+            style={activeTab === 'weekly' ? { boxShadow: '0 0 20px hsl(25 100% 50% / 0.5)' } : {}}
             data-testid="leaderboard-tab-weekly"
           >
             {t('rankings.weekly')}
@@ -86,7 +94,8 @@ export default function RankingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-card/50 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden"
+          className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl overflow-hidden"
+          style={{ boxShadow: '0 0 30px hsl(220 100% 50% / 0.1)' }}
         >
           {loading ? (
             <div className="text-center py-12 text-muted-foreground">Loading rankings...</div>
@@ -96,20 +105,20 @@ export default function RankingsPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-white/10 bg-muted/20">
-                    <th className="px-4 py-3 text-left text-sm font-semibold">{t('rankings.rank')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold">{t('rankings.player')}</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold">League</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold">{t('rankings.elo')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold">{t('rankings.wins')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-semibold">{t('rankings.losses')}</th>
+                  <tr className="border-b-2 border-[hsl(220,100%,50%,0.2)] bg-muted/20">
+                    <th className="px-4 py-4 text-left text-sm font-bold text-white">{t('rankings.rank')}</th>
+                    <th className="px-4 py-4 text-left text-sm font-bold text-white">{t('rankings.player')}</th>
+                    <th className="px-4 py-4 text-center text-sm font-bold text-white">League</th>
+                    <th className="px-4 py-4 text-right text-sm font-bold text-white">{t('rankings.elo')}</th>
+                    <th className="px-4 py-4 text-right text-sm font-bold text-white">{t('rankings.wins')}</th>
+                    <th className="px-4 py-4 text-right text-sm font-bold text-white">{t('rankings.losses')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rankings.map((entry) => (
                     <tr
                       key={entry.user_id}
-                      className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                      className="border-b border-white/5 hover:bg-[hsl(220,100%,50%,0.08)] transition-colors"
                       data-testid="leaderboard-row"
                     >
                       <td className="px-4 py-4">
@@ -121,23 +130,28 @@ export default function RankingsPage() {
                                 entry.rank === 2 ? 'text-[hsl(214,10%,76%)]' :
                                 'text-[hsl(28,65%,46%)]'
                               }`}
+                              style={{ filter: entry.rank === 1 ? 'drop-shadow(0 0 6px hsl(45 92% 54%))' : 'none' }}
                             />
                           )}
-                          <span className="font-semibold font-space">#{entry.rank}</span>
+                          <span className="font-bold font-brand text-white">#{entry.rank}</span>
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`fi fi-${entry.country_code?.toLowerCase()} h-4 w-6 rounded-sm`}></span>
-                          <span className="font-medium">{entry.display_name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`fi fi-${entry.country_code?.toLowerCase()} h-5 w-7 rounded-sm shadow-md`}></span>
+                          <span className="font-bold text-white">{entry.display_name}</span>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <EloBadge tier={entry.league} showIcon={false} />
+                        <EloBadge tier={entry.league} showLabel={false} />
                       </td>
-                      <td className="px-4 py-4 text-right font-bold font-space">{entry.elo_rating}</td>
-                      <td className="px-4 py-4 text-right text-emerald-400 font-semibold">{entry.wins}</td>
-                      <td className="px-4 py-4 text-right text-red-400 font-semibold">{entry.losses}</td>
+                      <td className="px-4 py-4 text-right">
+                        <span className="font-extrabold font-brand text-[hsl(45,92%,48%)]" style={{ textShadow: '0 0 8px hsl(45 92% 48% / 0.5)' }}>
+                          {entry.elo_rating}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-right text-[hsl(140,100%,50%)] font-bold">{entry.wins}</td>
+                      <td className="px-4 py-4 text-right text-[hsl(0,100%,60%)] font-bold">{entry.losses}</td>
                     </tr>
                   ))}
                 </tbody>
