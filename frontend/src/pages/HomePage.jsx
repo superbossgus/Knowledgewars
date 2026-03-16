@@ -154,67 +154,64 @@ export default function HomePage() {
             </div>
           </motion.div>
 
-          {/* Duels Remaining */}
+          {/* Games Remaining */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
-            className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
-            style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
-            data-testid="duels-remaining-chip"
+            className={`bg-card/60 backdrop-blur-xl border-2 rounded-2xl p-6 ${
+              credits?.no_credits 
+                ? 'border-[hsl(0,100%,50%,0.4)]' 
+                : credits?.low_credits_warning 
+                  ? 'border-[hsl(45,92%,48%,0.4)]'
+                  : 'border-[hsl(220,100%,50%,0.3)]'
+            }`}
+            style={{ boxShadow: credits?.low_credits_warning ? '0 0 20px hsl(45 92% 48% / 0.2)' : '0 0 20px hsl(220 100% 50% / 0.1)' }}
+            data-testid="games-remaining-card"
           >
-            <div className="flex items-center gap-2 mb-3">
-              <Target className="w-6 h-6 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
-              <h3 className="font-bold text-white text-lg">{t('home.duels_remaining')}</h3>
-            </div>
-            <div className="text-4xl font-extrabold font-brand mb-3">
-              {duelsRemaining?.unlimited ? (
-                <span className="text-[hsl(45,92%,48%)] gold-accent">{t('home.unlimited')}</span>
-              ) : (
-                <span className="text-white">{duelsRemaining?.remaining || 0}</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Coins className="w-6 h-6 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
+                <h3 className="font-bold text-white text-lg">Partidas</h3>
+              </div>
+              {credits?.low_credits_warning && (
+                <AlertTriangle className={`w-5 h-5 ${credits?.no_credits ? 'text-[hsl(0,100%,60%)]' : 'text-[hsl(45,92%,48%)]'}`} />
               )}
             </div>
-            {!duelsRemaining?.unlimited && (
-              <div className="w-full bg-muted/30 rounded-full h-3 overflow-hidden">
-                <div
-                  className="h-3 rounded-full transition-all progress-bar"
-                  style={{ width: `${((duelsRemaining?.remaining || 0) / (duelsRemaining?.limit || 100)) * 100}%` }}
-                />
-              </div>
+            <div className="text-4xl font-extrabold font-brand mb-3">
+              <span className={credits?.no_credits ? 'text-[hsl(0,100%,60%)]' : 'text-[hsl(45,92%,48%)]'} style={{ textShadow: '0 0 10px hsl(45 92% 48% / 0.5)' }}>
+                {credits?.games_remaining || 0}
+              </span>
+            </div>
+            {credits?.low_credits_warning && (
+              <button
+                onClick={() => navigate('/store')}
+                className="w-full text-sm py-2 rounded-lg bg-[hsl(25,100%,50%,0.2)] text-[hsl(25,100%,50%)] font-bold hover:bg-[hsl(25,100%,50%,0.3)] transition-colors"
+              >
+                {credits?.no_credits ? '¡Comprar Partidas!' : '¡Pocas partidas! Comprar más'}
+              </button>
             )}
           </motion.div>
 
-          {/* Premium Status */}
+          {/* Store Button */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3 }}
-            className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(45,92%,48%,0.3)] rounded-2xl p-6"
-            style={{ boxShadow: '0 0 20px hsl(45 92% 48% / 0.1)' }}
-            data-testid="premium-status-card"
+            className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(25,100%,50%,0.3)] rounded-2xl p-6"
+            style={{ boxShadow: '0 0 20px hsl(25 100% 50% / 0.1)' }}
           >
             <div className="flex items-center gap-2 mb-3">
-              <Crown className="w-6 h-6 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
-              <h3 className="font-bold text-white text-lg">{t('home.premium_status')}</h3>
+              <ShoppingCart className="w-6 h-6 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
+              <h3 className="font-bold text-white text-lg">Tienda</h3>
             </div>
-            <div className="mb-4">
-              {user?.premium_status ? (
-                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[hsl(45,92%,48%,0.2)] text-[hsl(45,92%,48%)] text-sm font-bold border border-[hsl(45,92%,48%,0.4)]">
-                  <Crown className="w-4 h-4" />
-                  Premium Active
-                </span>
-              ) : (
-                <span className="text-muted-foreground text-sm">Free Plan</span>
-              )}
-            </div>
-            {!user?.premium_status && (
-              <button
-                onClick={() => navigate('/premium')}
-                className="text-sm text-[hsl(45,92%,48%)] hover:underline font-semibold"
-              >
-                Upgrade Now →
-              </button>
-            )}
+            <p className="text-muted-foreground text-sm mb-4">50 partidas por $99 MXN</p>
+            <button
+              onClick={() => navigate('/store')}
+              className="w-full btn-primary py-3"
+            >
+              Ir a la Tienda
+            </button>
           </motion.div>
 
           {/* Top Topics */}
