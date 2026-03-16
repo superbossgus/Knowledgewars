@@ -8,7 +8,7 @@ import { AnswerOption } from '../components/custom/AnswerOption';
 import { ScoreBoard } from '../components/custom/ScoreBoard';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { Lightbulb, AlertCircle } from 'lucide-react';
+import { Lightbulb, AlertCircle, Zap } from 'lucide-react';
 
 export default function MatchPage() {
   const { matchId } = useParams();
@@ -22,7 +22,7 @@ export default function MatchPage() {
   const [myScore, setMyScore] = useState(0);
   const [opponentScore, setOpponentScore] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [answerState, setAnswerState] = useState('idle'); // idle, correct, wrong
+  const [answerState, setAnswerState] = useState('idle');
   const [isLocked, setIsLocked] = useState(false);
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState('');
@@ -199,10 +199,10 @@ export default function MatchPage() {
 
   if (!match || !match.questions || match.questions.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center relative z-10">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>{t('match.waiting')}</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[hsl(220,100%,50%)] mx-auto mb-4"></div>
+          <p className="text-white font-medium">{t('match.waiting')}</p>
         </div>
       </div>
     );
@@ -212,10 +212,10 @@ export default function MatchPage() {
   const isPlayerA = match.player_a_id === user.id;
 
   return (
-    <div className="min-h-screen p-4 md:p-6">
+    <div className="min-h-screen p-4 md:p-6 relative z-10">
       <div className="container mx-auto max-w-4xl">
         {/* Header with Scoreboard and Timer */}
-        <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/40 to-transparent p-3 backdrop-blur-md rounded-2xl mb-6">
+        <div className="sticky top-2 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/60 to-transparent p-4 backdrop-blur-xl rounded-2xl mb-6 border-2 border-[hsl(220,100%,50%,0.3)]" style={{ boxShadow: '0 0 30px hsl(220 100% 50% / 0.2)' }}>
           <ScoreBoard
             me={{
               name: isPlayerA ? match.player_a_name : match.player_b_name,
@@ -237,13 +237,14 @@ export default function MatchPage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          className="mt-4 rounded-2xl border-2 border-primary/30 bg-white/5 p-6 mb-6 backdrop-blur-sm"
-          style={{ boxShadow: '0 0 20px hsl(180 100% 50% / 0.1)' }}
+          className="mt-4 rounded-2xl border-2 border-[hsl(220,100%,50%,0.3)] bg-card/60 p-6 mb-6 backdrop-blur-xl"
+          style={{ boxShadow: '0 0 25px hsl(220 100% 50% / 0.15)' }}
         >
-          <div className="text-sm text-cyan-300 mb-3 font-semibold">
+          <div className="text-sm text-[hsl(25,100%,50%)] mb-3 font-bold font-brand uppercase tracking-wide">
+            <Zap className="w-4 h-4 inline mr-1" />
             Question {currentQuestion + 1} / 10
           </div>
-          <div className="text-xl md:text-2xl font-semibold text-white leading-relaxed" data-testid="match-question-text">
+          <div className="text-xl md:text-2xl font-bold text-white leading-relaxed" data-testid="match-question-text">
             {question.question}
           </div>
         </motion.div>
@@ -264,10 +265,10 @@ export default function MatchPage() {
 
         {/* Hint Button */}
         {!hintUsed && (
-          <div className="flex items-center justify-between p-4 rounded-lg bg-card/50 border-2 border-lime-500/30 backdrop-blur-sm">
-            <div className="flex items-center gap-2 text-sm text-lime-300">
-              <Lightbulb className="w-4 h-4" />
-              <span className="font-medium">Need help? Request a hint</span>
+          <div className="flex items-center justify-between p-4 rounded-xl bg-card/60 border-2 border-[hsl(45,92%,48%,0.3)] backdrop-blur-xl" style={{ boxShadow: '0 0 15px hsl(45 92% 48% / 0.1)' }}>
+            <div className="flex items-center gap-2 text-sm text-[hsl(45,92%,48%)]">
+              <Lightbulb className="w-5 h-5" style={{ filter: 'drop-shadow(0 0 4px hsl(45 92% 48%))' }} />
+              <span className="font-bold">Need help? Request a hint</span>
             </div>
             <button
               onClick={handleRequestHint}
@@ -280,8 +281,8 @@ export default function MatchPage() {
         )}
 
         {hintText && (
-          <div className="mt-3 p-4 rounded-lg bg-lime-500/10 border-2 border-lime-500/30 flex items-start gap-3">
-            <Lightbulb className="w-5 h-5 text-lime-400 shrink-0 mt-0.5" />
+          <div className="mt-3 p-4 rounded-xl bg-[hsl(45,92%,48%,0.1)] border-2 border-[hsl(45,92%,48%,0.3)] flex items-start gap-3">
+            <Lightbulb className="w-5 h-5 text-[hsl(45,92%,48%)] shrink-0 mt-0.5" />
             <div className="text-sm text-white font-medium">{hintText}</div>
           </div>
         )}
@@ -289,18 +290,19 @@ export default function MatchPage() {
 
       {/* Hint Confirmation Dialog */}
       {showHintDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-card border border-white/10 rounded-2xl p-6 max-w-md w-full"
+            className="bg-card/95 border-2 border-[hsl(25,100%,50%,0.4)] rounded-2xl p-6 max-w-md w-full backdrop-blur-xl"
+            style={{ boxShadow: '0 0 40px hsl(25 100% 50% / 0.2)' }}
           >
             <div className="flex items-center gap-3 mb-4">
-              <AlertCircle className="w-6 h-6 text-accent" />
-              <h3 className="text-xl font-semibold">Request Hint?</h3>
+              <AlertCircle className="w-6 h-6 text-[hsl(25,100%,50%)]" />
+              <h3 className="text-xl font-bold text-white font-brand">Request Hint?</h3>
             </div>
             <p className="text-muted-foreground mb-6">
-              Requesting a hint will cost you <strong>-1 point</strong>. Your opponent will be notified.
+              Requesting a hint will cost you <strong className="text-[hsl(25,100%,50%)]">-1 point</strong>. Your opponent will be notified.
             </p>
             <div className="flex gap-3">
               <button

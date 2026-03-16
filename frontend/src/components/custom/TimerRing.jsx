@@ -5,23 +5,15 @@ export const TimerRing = ({ seconds, total = 10, warningAt = 3 }) => {
   const r = 36;
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(1, seconds / total));
-  const stroke = c * pct;
   const urgent = seconds <= warningAt;
-
+  
+  // Brand colors: Blue primary, Orange for warning
+  const normalColor = 'hsl(220, 100%, 50%)';
+  const urgentColor = 'hsl(25, 100%, 50%)';
+  
   return (
     <div className="relative w-24 h-24" data-testid="match-timer">
-      {/* Outer glow ring */}
-      <div 
-        className="absolute inset-0 rounded-full"
-        style={{
-          background: urgent 
-            ? 'radial-gradient(circle, hsl(0 100% 60% / 0.3) 0%, transparent 70%)'
-            : 'radial-gradient(circle, hsl(180 100% 50% / 0.3) 0%, transparent 70%)',
-          filter: 'blur(8px)',
-        }}
-      />
-      
-      <svg className="w-24 h-24 -rotate-90 relative z-10" viewBox="0 0 100 100" aria-hidden="true">
+      <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100" aria-hidden>
         {/* Background circle */}
         <circle
           cx="50"
@@ -29,58 +21,50 @@ export const TimerRing = ({ seconds, total = 10, warningAt = 3 }) => {
           r="36"
           className="text-white/10"
           stroke="currentColor"
-          strokeWidth="6"
+          strokeWidth="8"
           fill="none"
         />
-        {/* Neon progress circle */}
+        {/* Progress circle */}
         <motion.circle
           cx="50"
           cy="50"
           r="36"
-          strokeWidth="6"
+          strokeWidth="8"
           fill="none"
           strokeLinecap="round"
-          stroke={urgent ? 'url(#gradient-red)' : 'url(#gradient-cyan)'}
+          stroke={urgent ? urgentColor : normalColor}
           strokeDasharray={c}
           strokeDashoffset={c * (1 - pct)}
-          style={{
-            filter: urgent 
-              ? 'drop-shadow(0 0 8px hsl(0 100% 60%)) drop-shadow(0 0 16px hsl(0 100% 60% / 0.5))'
-              : 'drop-shadow(0 0 8px hsl(180 100% 50%)) drop-shadow(0 0 16px hsl(180 100% 50% / 0.5))'
+          animate={{
+            stroke: urgent ? urgentColor : normalColor,
           }}
-          animate={urgent ? { 
-            opacity: [1, 0.7, 1],
-          } : {}}
-          transition={{ repeat: urgent ? Infinity : 0, duration: 0.5 }}
+          transition={{ duration: 0.2 }}
+          style={{
+            filter: `drop-shadow(0 0 8px ${urgent ? urgentColor : normalColor})`,
+          }}
         />
-        
-        {/* Gradient definitions */}
-        <defs>
-          <linearGradient id="gradient-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="hsl(180, 100%, 60%)" />
-            <stop offset="100%" stopColor="hsl(140, 100%, 50%)" />
-          </linearGradient>
-          <linearGradient id="gradient-red" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="hsl(0, 100%, 70%)" />
-            <stop offset="100%" stopColor="hsl(25, 100%, 60%)" />
-          </linearGradient>
-        </defs>
       </svg>
-      
-      {/* Timer text with glow */}
+      {/* Timer text */}
       <motion.div
-        className="absolute inset-0 grid place-items-center font-space text-2xl font-bold"
-        style={{
-          color: urgent ? 'hsl(0, 100%, 70%)' : 'hsl(180, 100%, 80%)',
-          textShadow: urgent 
-            ? '0 0 10px hsl(0 100% 60%), 0 0 20px hsl(0 100% 60% / 0.5)'
-            : '0 0 10px hsl(180 100% 50%), 0 0 20px hsl(180 100% 50% / 0.5)'
+        className="absolute inset-0 grid place-items-center font-brand text-2xl font-extrabold"
+        animate={{
+          scale: urgent ? [1, 1.1, 1] : 1,
+          color: urgent ? urgentColor : 'white',
         }}
-        animate={urgent ? { scale: [1, 1.1, 1] } : {}}
-        transition={{ repeat: urgent ? Infinity : 0, duration: 0.6 }}
+        transition={{
+          duration: urgent ? 0.5 : 0.2,
+          repeat: urgent ? Infinity : 0,
+        }}
+        style={{
+          textShadow: urgent
+            ? `0 0 15px ${urgentColor}`
+            : `0 0 10px ${normalColor}`,
+        }}
       >
-        {seconds}
+        {seconds}s
       </motion.div>
     </div>
   );
 };
+
+export default TimerRing;
