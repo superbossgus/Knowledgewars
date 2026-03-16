@@ -394,6 +394,494 @@ async def logout(response: Response, session_token: Optional[str] = Cookie(None)
 
 
 # ============================================================================
+# PASSWORD RECOVERY ENDPOINTS
+# ============================================================================
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(data: PasswordResetRequest):
+    """Request password reset - generates a reset token"""
+    user = users_col.find_one({"email": data.email})
+    
+    if not user:
+        # Don't reveal if email exists or not for security
+        return {"success": True, "message": "Si el email existe, recibirás instrucciones"}
+    
+    # Check if user uses Google auth (no password to reset)
+    if user.get("auth_provider") == "google" and not user.get("password"):
+        return {"success": True, "message": "Esta cuenta usa Google Sign-In. Por favor inicia sesión con Google."}
+    
+    # Delete any existing reset tokens for this email
+    password_resets_col.delete_many({"email": data.email})
+    
+    # Generate reset token (6-digit code for simplicity)
+    import random
+    reset_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    reset_token = f"reset_{uuid.uuid4().hex}"
+    
+    # Store reset token (expires in 15 minutes)
+    password_resets_col.insert_one({
+        "email": data.email,
+        "token": reset_token,
+        "code": reset_code,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
+        "created_at": datetime.now(timezone.utc),
+        "used": False
+    })
+    
+    # In production, you would send an email here with the code
+    # For now, we'll return the code in the response (REMOVE IN PRODUCTION)
+    return {
+        "success": True,
+        "message": "Código de recuperación enviado",
+        "reset_token": reset_token,
+        # NOTA: En producción, NO devolver el código - enviarlo por email
+        "_dev_code": reset_code  # Solo para desarrollo
+    }
+
+@app.post("/api/auth/verify-reset-code")
+async def verify_reset_code(email: str, code: str):
+    """Verify the reset code and return the reset token"""
+    reset_doc = password_resets_col.find_one({
+        "email": email,
+        "code": code,
+        "used": False
+    })
+    
+    if not reset_doc:
+        raise HTTPException(status_code=400, detail="Código inválido o expirado")
+    
+    # Check expiry
+    expires_at = reset_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="El código ha expirado")
+    
+    return {"success": True, "reset_token": reset_doc["token"]}
+
+@app.post("/api/auth/reset-password")
+async def reset_password(data: PasswordResetConfirm):
+    """Reset password using the reset token"""
+    reset_doc = password_resets_col.find_one({
+        "token": data.token,
+        "used": False
+    })
+    
+    if not reset_doc:
+        raise HTTPException(status_code=400, detail="Token inválido o ya usado")
+    
+    # Check expiry
+    expires_at = reset_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="El token ha expirado")
+    
+    # Validate new password
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
+    
+    # Update password
+    users_col.update_one(
+        {"email": reset_doc["email"]},
+        {"$set": {"password": hash_password(data.new_password)}}
+    )
+    
+    # Mark token as used
+    password_resets_col.update_one(
+        {"token": data.token},
+        {"$set": {"used": True}}
+    )
+    
+    return {"success": True, "message": "Contraseña actualizada exitosamente"}
+
+
+# ============================================================================
+# GAME CREDITS & COUPONS SYSTEM
+# ============================================================================
+
+class CouponCreateRequest(BaseModel):
+    code: str
+    coupon_type: str  # "discount" or "free_games"
+    value: int  # For discount: percentage (10-100), for free_games: number of games
+    max_uses: int = 100
+    expiration_days: int = 30
+    description: str = ""
+
+class CouponRedeemRequest(BaseModel):
+    code: str
+
+@app.get("/api/users/credits")
+async def get_user_credits(current_user: dict = Depends(get_current_user)):
+    """Get current user's game credits status"""
+    user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    games_remaining = user.get("games_remaining", 0)
+    
+    return {
+        "games_remaining": games_remaining,
+        "total_games_purchased": user.get("total_games_purchased", 0),
+        "low_credits_warning": games_remaining <= 5,
+        "no_credits": games_remaining <= 0
+    }
+
+@app.post("/api/coupons/redeem")
+async def redeem_coupon(data: CouponRedeemRequest, current_user: dict = Depends(get_current_user)):
+    """Redeem a coupon for free games or discount"""
+    code = data.code.upper().strip()
+    
+    # Find coupon
+    coupon = coupons_col.find_one({"code": code})
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado")
+    
+    # Check if coupon is active
+    if not coupon.get("active", True):
+        raise HTTPException(status_code=400, detail="Este cupón ya no está activo")
+    
+    # Check expiration
+    if coupon.get("expires_at"):
+        expires_at = coupon["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Este cupón ha expirado")
+    
+    # Check max uses
+    if coupon.get("uses", 0) >= coupon.get("max_uses", 100):
+        raise HTTPException(status_code=400, detail="Este cupón ha alcanzado su límite de usos")
+    
+    # Check if user already used this coupon
+    user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    used_coupons = user.get("coupons_used", [])
+    if code in used_coupons:
+        raise HTTPException(status_code=400, detail="Ya has usado este cupón")
+    
+    # Process coupon based on type
+    coupon_type = coupon.get("coupon_type", "free_games")
+    value = coupon.get("value", 0)
+    
+    result = {"success": True, "coupon_type": coupon_type}
+    
+    if coupon_type == "free_games":
+        # Add free games to user account
+        users_col.update_one(
+            {"_id": ObjectId(current_user["id"])},
+            {
+                "$inc": {"games_remaining": value},
+                "$push": {"coupons_used": code}
+            }
+        )
+        result["games_added"] = value
+        result["message"] = f"¡{value} partidas gratis añadidas a tu cuenta!"
+    
+    elif coupon_type == "discount":
+        # Store discount for next purchase
+        # The discount will be applied at checkout
+        users_col.update_one(
+            {"_id": ObjectId(current_user["id"])},
+            {
+                "$set": {"pending_discount": {"code": code, "percentage": value}},
+                "$push": {"coupons_used": code}
+            }
+        )
+        result["discount_percentage"] = value
+        result["message"] = f"¡Descuento del {value}% aplicado a tu próxima compra!"
+    
+    # Increment coupon usage
+    coupons_col.update_one(
+        {"code": code},
+        {"$inc": {"uses": 1}}
+    )
+    
+    # Get updated user credits
+    updated_user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    result["games_remaining"] = updated_user.get("games_remaining", 0)
+    
+    return result
+
+@app.post("/api/games/purchase")
+async def purchase_games(current_user: dict = Depends(get_current_user)):
+    """
+    Purchase 50 games for $99 MXN
+    This creates a checkout session for payment
+    """
+    user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    
+    # Check for pending discount
+    pending_discount = user.get("pending_discount")
+    
+    # Calculate price
+    base_price = 9900  # $99 MXN in centavos
+    final_price = base_price
+    discount_applied = None
+    
+    if pending_discount:
+        discount_pct = pending_discount.get("percentage", 0)
+        final_price = int(base_price * (100 - discount_pct) / 100)
+        discount_applied = {
+            "code": pending_discount.get("code"),
+            "percentage": discount_pct,
+            "savings": base_price - final_price
+        }
+    
+    # Create purchase record
+    purchase_id = str(uuid.uuid4())
+    purchases_col.insert_one({
+        "purchase_id": purchase_id,
+        "user_id": str(current_user["id"]),
+        "product": "50_games",
+        "games_quantity": 50,
+        "base_price": base_price,
+        "final_price": final_price,
+        "discount_applied": discount_applied,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    return {
+        "success": True,
+        "purchase_id": purchase_id,
+        "product": "50 Partidas",
+        "base_price_mxn": base_price / 100,
+        "final_price_mxn": final_price / 100,
+        "discount_applied": discount_applied,
+        "message": "Redirigiendo a pago..."
+    }
+
+@app.post("/api/games/confirm-purchase/{purchase_id}")
+async def confirm_purchase(purchase_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Confirm a purchase and add games to user account
+    In production, this would be called by payment webhook
+    """
+    purchase = purchases_col.find_one({
+        "purchase_id": purchase_id,
+        "user_id": str(current_user["id"]),
+        "status": "pending"
+    })
+    
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Compra no encontrada")
+    
+    games_to_add = purchase.get("games_quantity", 50)
+    
+    # Add games to user account
+    users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {
+            "$inc": {
+                "games_remaining": games_to_add,
+                "total_games_purchased": games_to_add
+            },
+            "$unset": {"pending_discount": ""}  # Clear used discount
+        }
+    )
+    
+    # Update purchase status
+    purchases_col.update_one(
+        {"purchase_id": purchase_id},
+        {"$set": {
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    # Get updated user
+    updated_user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    
+    return {
+        "success": True,
+        "message": f"¡{games_to_add} partidas añadidas a tu cuenta!",
+        "games_remaining": updated_user.get("games_remaining", 0)
+    }
+
+@app.post("/api/games/use-credit")
+async def use_game_credit(current_user: dict = Depends(get_current_user)):
+    """
+    Use one game credit when starting a match
+    Returns whether user can play
+    """
+    user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    games_remaining = user.get("games_remaining", 0)
+    
+    if games_remaining <= 0:
+        return {
+            "success": False,
+            "can_play": False,
+            "message": "No tienes partidas disponibles. ¡Compra más para seguir jugando!",
+            "games_remaining": 0
+        }
+    
+    # Deduct one game credit
+    users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$inc": {"games_remaining": -1}}
+    )
+    
+    new_remaining = games_remaining - 1
+    
+    response = {
+        "success": True,
+        "can_play": True,
+        "games_remaining": new_remaining
+    }
+    
+    # Warning when low on credits
+    if new_remaining <= 5 and new_remaining > 0:
+        response["warning"] = f"¡Te quedan solo {new_remaining} partidas! Compra más para seguir jugando."
+    elif new_remaining == 0:
+        response["warning"] = "¡Esta es tu última partida! Compra más para seguir jugando."
+    
+    return response
+
+
+# ============================================================================
+# ADMIN ENDPOINTS (Coupon Management)
+# ============================================================================
+
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "knowledge-wars-admin-2024")
+
+async def verify_admin(authorization: Optional[str] = Header(None)):
+    """Verify admin access"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Admin authentication required")
+    
+    token = authorization.replace("Bearer ", "")
+    if token != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid admin credentials")
+    
+    return True
+
+@app.post("/api/admin/coupons/create")
+async def create_coupon(coupon: CouponCreateRequest, admin: bool = Depends(verify_admin)):
+    """Create a new coupon (Admin only)"""
+    code = coupon.code.upper().strip()
+    
+    # Check if code already exists
+    existing = coupons_col.find_one({"code": code})
+    if existing:
+        raise HTTPException(status_code=400, detail="Este código de cupón ya existe")
+    
+    # Validate coupon type
+    if coupon.coupon_type not in ["discount", "free_games"]:
+        raise HTTPException(status_code=400, detail="Tipo de cupón inválido")
+    
+    # Validate value
+    if coupon.coupon_type == "discount" and (coupon.value < 1 or coupon.value > 100):
+        raise HTTPException(status_code=400, detail="El descuento debe ser entre 1% y 100%")
+    
+    if coupon.coupon_type == "free_games" and coupon.value < 1:
+        raise HTTPException(status_code=400, detail="El número de partidas gratis debe ser mayor a 0")
+    
+    # Create coupon
+    coupon_doc = {
+        "code": code,
+        "coupon_type": coupon.coupon_type,
+        "value": coupon.value,
+        "max_uses": coupon.max_uses,
+        "uses": 0,
+        "description": coupon.description,
+        "active": True,
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=coupon.expiration_days)
+    }
+    
+    coupons_col.insert_one(coupon_doc)
+    
+    return {
+        "success": True,
+        "message": "Cupón creado exitosamente",
+        "coupon": {
+            "code": code,
+            "type": coupon.coupon_type,
+            "value": coupon.value,
+            "max_uses": coupon.max_uses,
+            "expires_at": coupon_doc["expires_at"].isoformat()
+        }
+    }
+
+@app.get("/api/admin/coupons")
+async def list_coupons(admin: bool = Depends(verify_admin)):
+    """List all coupons (Admin only)"""
+    coupons = list(coupons_col.find({}, {"_id": 0}))
+    return {"coupons": serialize_doc(coupons)}
+
+@app.patch("/api/admin/coupons/{code}/toggle")
+async def toggle_coupon(code: str, admin: bool = Depends(verify_admin)):
+    """Toggle coupon active status (Admin only)"""
+    code = code.upper().strip()
+    coupon = coupons_col.find_one({"code": code})
+    
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado")
+    
+    new_status = not coupon.get("active", True)
+    coupons_col.update_one(
+        {"code": code},
+        {"$set": {"active": new_status}}
+    )
+    
+    return {
+        "success": True,
+        "code": code,
+        "active": new_status
+    }
+
+@app.delete("/api/admin/coupons/{code}")
+async def delete_coupon(code: str, admin: bool = Depends(verify_admin)):
+    """Delete a coupon (Admin only)"""
+    code = code.upper().strip()
+    result = coupons_col.delete_one({"code": code})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado")
+    
+    return {"success": True, "message": "Cupón eliminado"}
+
+@app.get("/api/admin/stats")
+async def get_admin_stats(admin: bool = Depends(verify_admin)):
+    """Get admin dashboard stats"""
+    total_users = users_col.count_documents({})
+    total_matches = matches_col.count_documents({})
+    total_purchases = purchases_col.count_documents({"status": "completed"})
+    active_coupons = coupons_col.count_documents({"active": True})
+    
+    # Revenue calculation
+    completed_purchases = list(purchases_col.find({"status": "completed"}))
+    total_revenue = sum(p.get("final_price", 0) for p in completed_purchases)
+    
+    # Games distributed
+    total_games_given = sum(p.get("games_quantity", 0) for p in completed_purchases)
+    
+    return {
+        "total_users": total_users,
+        "total_matches": total_matches,
+        "total_purchases": total_purchases,
+        "total_revenue_mxn": total_revenue / 100,
+        "total_games_distributed": total_games_given,
+        "active_coupons": active_coupons
+    }
+
+
+# ============================================================================
 # USER ENDPOINTS
 # ============================================================================
 
