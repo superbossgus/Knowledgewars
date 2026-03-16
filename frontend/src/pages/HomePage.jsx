@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/store';
 import { EloBadge } from '../components/custom/EloBadge';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { Swords, Trophy, Flame, Crown, LogOut, Shield, Target, Zap } from 'lucide-react';
+import { Swords, Trophy, Flame, LogOut, Shield, Zap, Coins, AlertTriangle, ShoppingCart } from 'lucide-react';
 
 export default function HomePage() {
   const { t } = useTranslation();
@@ -14,7 +14,7 @@ export default function HomePage() {
   const { user, logout } = useAuthStore();
   
   const [topTopics, setTopTopics] = useState([]);
-  const [duelsRemaining, setDuelsRemaining] = useState(null);
+  const [credits, setCredits] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,27 +23,56 @@ export default function HomePage() {
 
   const loadData = async () => {
     try {
-      const [topicsRes, duelsRes] = await Promise.all([
+      const [topicsRes, creditsRes] = await Promise.all([
         api.get('/api/topics/top'),
-        api.get('/api/users/duels/remaining')
+        api.get('/api/users/credits')
       ]);
       
-      setTopTopics(topicsRes.data.topics);
-      setDuelsRemaining(duelsRes.data);
+      setTopTopics(topicsRes.data.topics || []);
+      setCredits(creditsRes.data);
     } catch (error) {
-      toast.error(t('common.error'));
+      // Fallback for users without credits field
+      setTopTopics([]);
+      setCredits({ games_remaining: 0, low_credits_warning: true, no_credits: true });
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePlayRandom = () => {
-    if (duelsRemaining && !duelsRemaining.unlimited && duelsRemaining.remaining === 0) {
-      toast.error('No duels remaining. Upgrade to Premium!');
-      navigate('/premium');
+  const handlePlayRandom = async () => {
+    // Check if user has credits
+    if (credits?.no_credits || credits?.games_remaining <= 0) {
+      toast.error('¡No tienes partidas disponibles! Compra más en la tienda.');
+      navigate('/store');
       return;
     }
-    navigate('/lobby');
+    
+    // Use one credit before navigating to lobby
+    try {
+      const response = await api.post('/api/games/use-credit');
+      if (!response.data.can_play) {
+        toast.error(response.data.message);
+        navigate('/store');
+        return;
+      }
+      
+      // Show warning if low on credits
+      if (response.data.warning) {
+        toast.warning(response.data.warning);
+      }
+      
+      // Update local credits count
+      setCredits(prev => ({
+        ...prev,
+        games_remaining: response.data.games_remaining,
+        low_credits_warning: response.data.games_remaining <= 5,
+        no_credits: response.data.games_remaining <= 0
+      }));
+      
+      navigate('/lobby');
+    } catch (error) {
+      toast.error('Error al iniciar partida');
+    }
   };
 
   const handleLogout = () => {
