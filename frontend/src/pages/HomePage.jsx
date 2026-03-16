@@ -247,7 +247,7 @@ export default function HomePage() {
             className="xl:col-span-2 bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
             style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
           >
-            <h3 className="font-bold mb-4 text-white text-lg">Quick Actions</h3>
+            <h3 className="font-bold mb-4 text-white text-lg">Acciones Rápidas</h3>
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => navigate('/rankings')}
@@ -257,11 +257,11 @@ export default function HomePage() {
                 <span className="text-sm font-bold text-white">Rankings</span>
               </button>
               <button
-                onClick={() => navigate('/premium')}
-                className="p-5 rounded-xl bg-muted/30 hover:bg-[hsl(45,92%,48%,0.15)] border border-transparent hover:border-[hsl(45,92%,48%,0.3)] transition-all text-center"
+                onClick={() => navigate('/store')}
+                className="p-5 rounded-xl bg-muted/30 hover:bg-[hsl(25,100%,50%,0.15)] border border-transparent hover:border-[hsl(25,100%,50%,0.3)] transition-all text-center"
               >
-                <Crown className="w-8 h-8 mx-auto mb-2 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
-                <span className="text-sm font-bold text-white">Premium</span>
+                <Coins className="w-8 h-8 mx-auto mb-2 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
+                <span className="text-sm font-bold text-white">Tienda</span>
               </button>
             </div>
           </motion.div>
