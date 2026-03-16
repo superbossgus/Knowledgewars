@@ -62,6 +62,7 @@ subscriptions_col = db["subscriptions"]
 purchases_col = db["purchases"]
 coupons_col = db["coupons"]
 payment_transactions_col = db["payment_transactions"]
+user_sessions_col = db["user_sessions"]  # For Google OAuth sessions
 
 # Indexes
 users_col.create_index("email", unique=True)
