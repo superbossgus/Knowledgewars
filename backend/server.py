@@ -209,7 +209,15 @@ async def register(user_data: UserCreate):
 async def login(credentials: UserLogin):
     """Login user"""
     user = users_col.find_one({"email": credentials.email})
-    if not user or not verify_password(credentials.password, user["password"]):
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Check if user registered with Google (no password)
+    if not user.get("password"):
+        raise HTTPException(status_code=400, detail="Please use Google sign-in for this account")
+    
+    if not verify_password(credentials.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Update last_seen on login
@@ -226,15 +234,151 @@ async def login(credentials: UserLogin):
     }
 
 
+# ============================================================================
+# GOOGLE OAUTH ENDPOINTS (Emergent Auth)
+# ============================================================================
+
+class GoogleSessionRequest(BaseModel):
+    session_id: str
+    remember_me: bool = False
+
+
+@app.post("/api/auth/google/session")
+async def process_google_session(data: GoogleSessionRequest, response: Response):
+    """
+    Process Google OAuth session from Emergent Auth.
+    Exchange session_id for user data and create local session.
+    """
+    try:
+        # Call Emergent Auth to get session data
+        async with httpx.AsyncClient() as http_client:
+            auth_response = await http_client.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": data.session_id},
+                timeout=10.0
+            )
+        
+        if auth_response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid session")
+        
+        google_data = auth_response.json()
+        email = google_data.get("email")
+        name = google_data.get("name", "Player")
+        picture = google_data.get("picture", "")
+        
+        if not email:
+            raise HTTPException(status_code=400, detail="Email not provided by Google")
+        
+        # Find or create user
+        user = users_col.find_one({"email": email})
+        
+        if user:
+            # Update existing user with Google info
+            users_col.update_one(
+                {"_id": user["_id"]},
+                {"$set": {
+                    "last_seen": datetime.utcnow(),
+                    "google_picture": picture,
+                    "auth_provider": user.get("auth_provider", "google")
+                }}
+            )
+            user_id = str(user["_id"])
+        else:
+            # Create new user from Google data
+            user_doc = {
+                "email": email,
+                "display_name": name.split()[0] if name else "Player",
+                "google_picture": picture,
+                "country_code": "us",  # Default, user can change later
+                "favorite_topic": "General Knowledge",
+                "language": "es",
+                "dnd_enabled": False,
+                "elo_rating": 1200,
+                "league": "plata",
+                "premium_status": False,
+                "premium_expiration": None,
+                "created_at": datetime.now(timezone.utc),
+                "last_seen": datetime.now(timezone.utc),
+                "wins": 0,
+                "losses": 0,
+                "total_duels": 0,
+                "auth_provider": "google"
+            }
+            result = users_col.insert_one(user_doc)
+            user = user_doc
+            user["_id"] = result.inserted_id
+            user_id = str(result.inserted_id)
+        
+        # Create local session with appropriate expiry
+        local_session_token = f"kw_{uuid.uuid4().hex}"
+        
+        # If remember_me is True, session lasts forever (100 years)
+        # Otherwise, use standard 7 days
+        if data.remember_me:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=36500)  # ~100 years
+        else:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        
+        user_sessions_col.insert_one({
+            "user_id": user_id,
+            "session_token": local_session_token,
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc),
+            "remember_me": data.remember_me
+        })
+        
+        # Set session cookie
+        response.set_cookie(
+            key="session_token",
+            value=local_session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            path="/",
+            max_age=int((expires_at - datetime.now(timezone.utc)).total_seconds())
+        )
+        
+        # Also return JWT token for backward compatibility
+        jwt_token = create_access_token({"user_id": user_id})
+        
+        return {
+            "success": True,
+            "token": jwt_token,
+            "user": serialize_doc(user)
+        }
+        
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to verify Google session: {str(e)}")
+
+
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Get current user profile"""
     # Update last_seen timestamp
-    users_col.update_one(
-        {"_id": ObjectId(current_user["id"])},
-        {"$set": {"last_seen": datetime.utcnow()}}
-    )
+    user_id = current_user.get("id") or current_user.get("user_id")
+    if user_id:
+        try:
+            users_col.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": {"last_seen": datetime.utcnow()}}
+            )
+        except:
+            # Try with user_id field for Google OAuth users
+            users_col.update_one(
+                {"user_id": user_id},
+                {"$set": {"last_seen": datetime.utcnow()}}
+            )
     return serialize_doc(current_user)
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response, session_token: Optional[str] = Cookie(None)):
+    """Logout user - clear session"""
+    if session_token:
+        user_sessions_col.delete_one({"session_token": session_token})
+    
+    response.delete_cookie(key="session_token", path="/")
+    return {"success": True}
 
 
 # ============================================================================
