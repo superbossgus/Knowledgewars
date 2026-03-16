@@ -23,19 +23,27 @@
         -->
         <title>Knowledge Wars | PvP Trivia</title>
         <style>
-            /* Hide Emergent badge completely */
+            /* Hide Emergent badge completely - aggressive approach */
             #emergent-badge,
-            [id*="emergent-badge"],
-            a[href*="emergent.sh"][style*="position: fixed"],
-            a[href*="utm_source=emergent"] {
+            [id*="emergent"],
+            a[href*="emergent.sh"],
+            a[href*="utm_source=emergent"],
+            [style*="position: fixed"][style*="bottom"],
+            body > a[style*="z-index: 9999"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
                 width: 0 !important;
                 height: 0 !important;
+                max-width: 0 !important;
+                max-height: 0 !important;
+                overflow: hidden !important;
                 position: absolute !important;
-                left: -9999px !important;
+                left: -99999px !important;
+                top: -99999px !important;
+                transform: scale(0) !important;
+                clip: rect(0,0,0,0) !important;
             }
         </style>
         <script>
