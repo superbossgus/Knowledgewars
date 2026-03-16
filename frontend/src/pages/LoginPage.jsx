@@ -176,7 +176,7 @@ export default function LoginPage() {
         </div>
 
         {/* Login Card */}
-        <div className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6 shadow-2xl" style={{ boxShadow: '0 0 40px hsl(220 100% 50% / 0.15)' }}>
+        <div className="bg-[hsl(220,28%,10%,0.85)] backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6 shadow-2xl" style={{ boxShadow: '0 0 40px hsl(220 100% 50% / 0.15)' }}>
           
           {/* Google Login Button */}
           <button
