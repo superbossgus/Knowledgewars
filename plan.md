@@ -194,6 +194,28 @@ Phase 2 User Stories
 6. ✅ Premium - Gold subscription, blue duel pack
 7. ✅ Results - Victory/defeat theming
 
+---
+
+## Phase 6: Google OAuth + Remember Me (Status: COMPLETED ✅)
+
+**Implemented:**
+- [x] Google OAuth via Emergent Auth integration
+- [x] "Continuar con Google" button on login page
+- [x] "Recordarme" checkbox for persistent sessions
+- [x] Backend endpoint `/api/auth/google/session` for session exchange
+- [x] Session cookie management with configurable expiry
+- [x] Logout endpoint to clear sessions
+- [x] Support for both JWT and cookie-based authentication
+- [x] Graceful handling of Google-only accounts (no password)
+
+**Session Duration:**
+- Remember Me OFF: 7 days
+- Remember Me ON: Indefinite (~100 years)
+
+**Files Modified:**
+- `/app/backend/server.py` - Added Google OAuth endpoints and session management
+- `/app/frontend/src/pages/LoginPage.jsx` - Added Google button and remember me checkbox
+
 ## 4) Success Criteria
 - POC: All core tests pass; valid cached question sets in 3 languages; WS duel loop deterministic; Stripe checkout + webhook updates DB
 - MVP: End-to-end flows functional (auth→match→results→leaderboards→paywall→purchase→entitlements), multilanguage UI polished, caches stable, limits enforced
