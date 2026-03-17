@@ -19,6 +19,20 @@ export default function LobbyPage() {
   const [loading, setLoading] = useState(true);
   const [challenging, setChallenging] = useState(false);
 
+  // Change language based on user preference
+  useEffect(() => {
+    if (user?.language && i18n.language !== user.language) {
+      i18n.changeLanguage(user.language);
+    }
+  }, [user?.language, i18n]);
+
+  // Helper function to translate topic names
+  const translateTopic = (topic) => {
+    const topicKey = `topics.${topic}`;
+    const translated = t(topicKey);
+    return translated !== topicKey ? translated : topic;
+  };
+
   useEffect(() => {
     loadOnlineUsers();
     const interval = setInterval(loadOnlineUsers, 10000);
