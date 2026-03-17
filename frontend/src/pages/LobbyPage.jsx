@@ -111,20 +111,20 @@ export default function LobbyPage() {
           className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6 mb-6"
           style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
         >
-          <label className="block text-sm font-bold mb-3 text-white">Select Topic</label>
+          <label className="block text-sm font-bold mb-3 text-white">{t('lobby.select_topic')}</label>
           <select
             value={selectedTopic}
             onChange={(e) => setSelectedTopic(e.target.value)}
             className="w-full px-4 py-3 bg-background/80 border-2 border-[hsl(220,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(220,100%,50%)] focus:border-[hsl(220,100%,50%)] focus:outline-none text-white font-medium transition-all"
           >
-            <option value="General Knowledge">General Knowledge</option>
-            <option value="Sports">Sports</option>
-            <option value="History">History</option>
-            <option value="Science">Science</option>
-            <option value="Technology">Technology</option>
-            <option value="Movies/TV">Movies/TV</option>
-            <option value="Music">Music</option>
-            <option value="Gaming">Gaming</option>
+            <option value="General Knowledge">{translateTopic('General Knowledge')}</option>
+            <option value="Sports">{translateTopic('Sports')}</option>
+            <option value="History">{translateTopic('History')}</option>
+            <option value="Science">{translateTopic('Science')}</option>
+            <option value="Technology">{translateTopic('Technology')}</option>
+            <option value="Movies/TV">{translateTopic('Movies/TV')}</option>
+            <option value="Music">{translateTopic('Music')}</option>
+            <option value="Gaming">{translateTopic('Gaming')}</option>
           </select>
         </motion.div>
 
