@@ -1087,10 +1087,12 @@ async def generate_questions(topic: str, language: str = "es", current_user: dic
 
 @app.post("/api/matches/create")
 async def create_match(match_data: MatchCreate, current_user: dict = Depends(get_current_user)):
-    """Create a new match challenge"""
-    # Check duel limit
-    if not check_duel_limit(current_user["id"]):
-        raise HTTPException(status_code=403, detail="Duel limit reached. Upgrade to Premium or purchase more duels.")
+    """Create a new match challenge - NO credit deduction here, only when match starts"""
+    
+    # Check if user has credits (but don't deduct yet)
+    user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    if user.get("games_remaining", 0) <= 0:
+        raise HTTPException(status_code=403, detail="No tienes partidas disponibles. Compra más en la tienda.")
     
     # Check opponent exists and is not in DND
     opponent = users_col.find_one({"_id": ObjectId(match_data.opponent_id)})
@@ -1100,20 +1102,24 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
     if opponent.get("dnd_enabled"):
         raise HTTPException(status_code=400, detail="Opponent is in Do Not Disturb mode")
     
+    # Check opponent has credits too
+    if opponent.get("games_remaining", 0) <= 0:
+        raise HTTPException(status_code=400, detail="El oponente no tiene partidas disponibles")
+    
     # Generate questions
     try:
         question_set = await question_generator.generate_questions(match_data.topic, match_data.language)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate questions: {str(e)}")
     
-    # Create match
+    # Create match with pending status
     match_doc = {
         "player_a_id": ObjectId(current_user["id"]),
         "player_b_id": ObjectId(match_data.opponent_id),
         "player_a_name": current_user["display_name"],
         "player_b_name": opponent["display_name"],
-        "player_a_country": current_user["country_code"],
-        "player_b_country": opponent["country_code"],
+        "player_a_country": current_user.get("country_code", "us"),
+        "player_b_country": opponent.get("country_code", "us"),
         "topic": match_data.topic,
         "language": match_data.language,
         "questions": question_set["questions"],
@@ -1122,24 +1128,31 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
         "current_question": 0,
         "status": "pending",
         "created_at": datetime.utcnow(),
+        "expires_at": datetime.utcnow() + timedelta(minutes=2),  # Challenge expires in 2 minutes
         "started_at": None,
         "ended_at": None,
         "winner_id": None,
         "elo_delta_a": 0,
-        "elo_delta_b": 0
+        "elo_delta_b": 0,
+        "credits_deducted": False  # Track if credits were deducted
     }
     
     result = matches_col.insert_one(match_doc)
     match_doc["_id"] = result.inserted_id
     
-    # Send challenge notification to opponent
+    # Send challenge notification to opponent via WebSocket
     await manager.send_message(match_data.opponent_id, {
         "type": "challenge_received",
         "match": serialize_doc(match_doc),
-        "challenger": serialize_doc(current_user)
+        "challenger": {
+            "id": current_user["id"],
+            "display_name": current_user["display_name"],
+            "country_code": current_user.get("country_code", "us"),
+            "elo_rating": current_user.get("elo_rating", 1200)
+        }
     })
     
-    return {"match": serialize_doc(match_doc)}
+    return {"match": serialize_doc(match_doc), "message": "Desafío enviado. Esperando respuesta..."}
 
 
 @app.post("/api/matches/{match_id}/accept")
