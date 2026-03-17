@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Swords, Users, Shield, Zap } from 'lucide-react';
 
 export default function LobbyPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuthStore();
