@@ -88,7 +88,7 @@ export default function HomePage() {
                 <h1 className="text-2xl md:text-3xl font-extrabold font-brand text-white">
                   KNOWLEDGE <span className="text-[hsl(25,100%,50%)]">WARS</span>
                 </h1>
-                <p className="text-sm text-muted-foreground">Welcome back, <span className="text-[hsl(220,100%,70%)] font-semibold">{user?.display_name}</span>!</p>
+                <p className="text-sm text-muted-foreground">{t('common.welcome_back')}, <span className="text-[hsl(220,100%,70%)] font-semibold">{user?.display_name}</span>!</p>
               </div>
             </div>
           </div>
