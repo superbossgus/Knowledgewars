@@ -220,16 +220,31 @@ export default function MatchPage() {
             me={{
               name: isPlayerA ? match.player_a_name : match.player_b_name,
               flag: isPlayerA ? match.player_a_country : match.player_b_country,
-              score: myScore
+              score: myScore,
+              tier: isPlayerA ? match.player_a_tier : match.player_b_tier,
+              elo: isPlayerA ? match.player_a_elo : match.player_b_elo
             }}
             opponent={{
               name: isPlayerA ? match.player_b_name : match.player_a_name,
               flag: isPlayerA ? match.player_b_country : match.player_a_country,
-              score: opponentScore
+              score: opponentScore,
+              tier: isPlayerA ? match.player_b_tier : match.player_a_tier,
+              elo: isPlayerA ? match.player_b_elo : match.player_a_elo
             }}
           />
           <TimerRing seconds={timeRemaining} />
         </div>
+
+        {/* Topic Display */}
+        {match.topic && (
+          <div className="mb-4 flex items-center justify-center">
+            <div className="px-4 py-2 rounded-full bg-[hsl(25,100%,50%,0.15)] border border-[hsl(25,100%,50%,0.4)]">
+              <span className="text-sm font-bold text-[hsl(25,100%,50%)]">
+                📚 Tema: {match.topic}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Question */}
         <motion.div
