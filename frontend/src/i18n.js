@@ -51,12 +51,14 @@ const resources = {
       play_random: 'Jugar Partida Aleatoria',
       challenge_random: '¡Retar a un oponente aleatorio ahora!',
       online_players: 'Jugadores en Línea',
-      no_online: 'No hay jugadores en línea ahora. ¡Intenta más tarde!',
+      no_online: 'No hay jugadores en línea de tu rango ahora. ¡Intenta más tarde!',
       challenge: 'Retar',
-      no_users: 'No hay usuarios disponibles',
+      no_users: 'No hay usuarios disponibles de tu rango',
       challenge_sent: '¡Reto enviado!',
       challenge_topic: 'Tema',
-      challenge_failed: 'Error al crear el reto'
+      challenge_failed: 'Error al crear el reto',
+      matchmaking_tier: 'Solo verás jugadores de tu mismo tier',
+      your_tier: 'Tu tier'
     },
     topics: {
       'General Knowledge': 'Conocimiento General',
