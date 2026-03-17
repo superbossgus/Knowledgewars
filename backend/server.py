@@ -1169,7 +1169,7 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
             "id": current_user["id"],
             "display_name": current_user["display_name"],
             "country_code": current_user.get("country_code", "us"),
-            "elo_rating": current_user.get("elo_rating", 1200)
+            "elo_rating": current_user.get("elo_rating", 500)
         }
     })
     
