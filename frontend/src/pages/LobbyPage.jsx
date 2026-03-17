@@ -6,7 +6,23 @@ import { useAuthStore } from '../store/store';
 import { EloBadge } from '../components/custom/EloBadge';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Swords, Users, Shield, Zap } from 'lucide-react';
+import { ArrowLeft, Swords, Users, Shield, Zap, Search, Sparkles, List } from 'lucide-react';
+
+// Predefined topics list
+const PREDEFINED_TOPICS = [
+  'General Knowledge',
+  'Sports',
+  'History', 
+  'Science',
+  'Technology',
+  'Movies/TV',
+  'Music',
+  'Gaming',
+  'Geography',
+  'Art & Literature',
+  'Food & Cuisine',
+  'Animals & Nature'
+];
 
 export default function LobbyPage() {
   const { t, i18n } = useTranslation();
@@ -16,6 +32,8 @@ export default function LobbyPage() {
   
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [selectedTopic, setSelectedTopic] = useState(location.state?.topic || 'General Knowledge');
+  const [customTopic, setCustomTopic] = useState('');
+  const [topicMode, setTopicMode] = useState('list'); // 'list' or 'custom'
   const [loading, setLoading] = useState(true);
   const [challenging, setChallenging] = useState(false);
 
@@ -31,6 +49,14 @@ export default function LobbyPage() {
     const topicKey = `topics.${topic}`;
     const translated = t(topicKey);
     return translated !== topicKey ? translated : topic;
+  };
+
+  // Get the final topic to use
+  const getFinalTopic = () => {
+    if (topicMode === 'custom' && customTopic.trim()) {
+      return customTopic.trim();
+    }
+    return selectedTopic;
   };
 
   useEffect(() => {
