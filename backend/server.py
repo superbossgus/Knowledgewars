@@ -1301,11 +1301,27 @@ async def get_match(match_id: str, current_user: dict = Depends(get_current_user
 
 @app.get("/api/matches/pending")
 async def get_pending_matches(current_user: dict = Depends(get_current_user)):
-    """Get pending match challenges for current user"""
+    """Get pending match challenges for current user - excludes expired ones"""
+    now = datetime.utcnow()
+    
+    # First, mark expired matches
+    matches_col.update_many(
+        {
+            "status": "pending",
+            "expires_at": {"$lt": now}
+        },
+        {"$set": {"status": "expired"}}
+    )
+    
+    # Get non-expired pending matches
     matches = list(matches_col.find(
         {
             "player_b_id": ObjectId(current_user["id"]),
-            "status": "pending"
+            "status": "pending",
+            "$or": [
+                {"expires_at": {"$gte": now}},
+                {"expires_at": {"$exists": False}}
+            ]
         },
         {
             "player_a_id": 1,
@@ -1313,7 +1329,8 @@ async def get_pending_matches(current_user: dict = Depends(get_current_user)):
             "player_a_country": 1,
             "topic": 1,
             "language": 1,
-            "created_at": 1
+            "created_at": 1,
+            "expires_at": 1
         }
     ).sort("created_at", DESCENDING).limit(10))
     
