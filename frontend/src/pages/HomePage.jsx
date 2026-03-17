@@ -228,7 +228,7 @@ export default function HomePage() {
             className="xl:col-span-2 bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
             style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
           >
-            <h3 className="font-bold mb-4 text-white text-lg">Acciones Rápidas</h3>
+            <h3 className="font-bold mb-4 text-white text-lg">{t('home.quick_actions')}</h3>
             <div className="grid grid-cols-2 gap-4">
               <button
                 onClick={() => navigate('/rankings')}
