@@ -142,7 +142,7 @@ export default function LobbyPage() {
             data-testid="matchmaking-random-button"
           >
             <Zap className="w-5 h-5 mr-2 inline" />
-            Challenge Random Opponent
+            {t('lobby.play_random')}
           </button>
         </motion.div>
 
@@ -156,14 +156,14 @@ export default function LobbyPage() {
         >
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
             <Users className="w-6 h-6 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(220 100% 50%))' }} />
-            Online Players ({onlineUsers.length})
+            {t('lobby.online_players')} ({onlineUsers.length})
           </h2>
 
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading players...</div>
+            <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
           ) : onlineUsers.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No players online right now. Try again later!
+              {t('lobby.no_online')}
             </div>
           ) : (
             <div className="space-y-3">
