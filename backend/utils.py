@@ -125,7 +125,7 @@ Ensure exactly one correct option. Avoid ambiguity and time-sensitive facts."""
     def __init__(self, api_key: str, db):
         self.api_key = api_key
         self.db = db
-        self.prompt_version = "v1"
+        self.prompt_version = "v2"  # Updated to force regeneration with correct language hints
     
     def _normalize_topic(self, topic: str) -> str:
         """Normalize topic for caching"""
