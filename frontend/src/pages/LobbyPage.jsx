@@ -351,16 +351,16 @@ export default function LobbyPage() {
           
           {/* Info message about rank filter */}
           {!showAllRanks && !searchUsername && (
-            <div className="mb-4 p-3 rounded-xl bg-[hsl(220,100%,50%,0.1)] border border-[hsl(220,100%,50%,0.2)] text-sm text-[hsl(220,100%,70%)]">
-              <Filter className="w-4 h-4 inline mr-2" />
-              {t('lobby.matchmaking_tier')}
+            <div className="mb-4 p-4 rounded-xl bg-[hsl(220,100%,50%,0.15)] border-2 border-[hsl(220,100%,50%,0.3)]">
+              <Filter className="w-5 h-5 inline mr-2 text-[hsl(220,100%,70%)]" />
+              <span className="text-base font-semibold text-white">{t('lobby.matchmaking_tier')}</span>
             </div>
           )}
           
           {showAllRanks && !searchUsername && (
-            <div className="mb-4 p-3 rounded-xl bg-[hsl(25,100%,50%,0.1)] border border-[hsl(25,100%,50%,0.2)] text-sm text-[hsl(25,100%,70%)]">
-              <Sparkles className="w-4 h-4 inline mr-2" />
-              {t('lobby.friendly_match_info')}
+            <div className="mb-4 p-4 rounded-xl bg-[hsl(25,100%,50%,0.15)] border-2 border-[hsl(25,100%,50%,0.3)]">
+              <Sparkles className="w-5 h-5 inline mr-2 text-[hsl(25,100%,60%)]" />
+              <span className="text-base font-semibold text-white">{t('lobby.friendly_match_info')}</span>
             </div>
           )}
 
