@@ -238,9 +238,19 @@ async def login(credentials: UserLogin):
     
     token = create_access_token({"user_id": str(user["_id"])})
     
+    # Add rank info to user response
+    elo = user.get("elo_rating", 500)
+    rank_info = ELOCalculator.get_rank(elo)
+    progress_info = ELOCalculator.get_progress_to_next_rank(elo)
+    
+    user_data = serialize_doc(user)
+    user_data["rank_name"] = rank_info['name']
+    user_data["rank_tier"] = rank_info['tier']
+    user_data["rank_progress"] = progress_info
+    
     return {
         "token": token,
-        "user": serialize_doc(user)
+        "user": user_data
     }
 
 
