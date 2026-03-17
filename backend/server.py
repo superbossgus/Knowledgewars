@@ -1251,9 +1251,38 @@ async def reject_match(match_id: str, current_user: dict = Depends(get_current_u
         "match_id": match_id,
         "message": f"{current_user['display_name']} rechazó tu desafío"
     })
-    })
     
     return {"success": True}
+
+
+@app.post("/api/matches/{match_id}/cancel")
+async def cancel_match(match_id: str, current_user: dict = Depends(get_current_user)):
+    """Cancel a pending match challenge (by the challenger)"""
+    match = matches_col.find_one({"_id": ObjectId(match_id)})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    # Only the challenger can cancel
+    if str(match["player_a_id"]) != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if match["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Solo se pueden cancelar desafíos pendientes")
+    
+    # Update match status
+    matches_col.update_one(
+        {"_id": ObjectId(match_id)},
+        {"$set": {"status": "cancelled", "ended_at": datetime.utcnow()}}
+    )
+    
+    # Notify opponent
+    await manager.send_message(str(match["player_b_id"]), {
+        "type": "challenge_cancelled",
+        "match_id": match_id,
+        "message": f"{current_user['display_name']} canceló el desafío"
+    })
+    
+    return {"success": True, "message": "Desafío cancelado"}
 
 
 @app.get("/api/matches/{match_id}")
