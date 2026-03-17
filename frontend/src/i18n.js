@@ -5,13 +5,14 @@ const resources = {
   es: {
     common: {
       app_name: 'Knowledge Wars',
-      play: 'Jugar',
+      play: 'JUGAR',
       cancel: 'Cancelar',
       confirm: 'Confirmar',
       loading: 'Cargando...',
       error: 'Error',
       success: 'Éxito',
-      close: 'Cerrar'
+      close: 'Cerrar',
+      welcome_back: 'Bienvenido de nuevo'
     },
     auth: {
       login: 'Iniciar Sesión',
@@ -25,13 +26,34 @@ const resources = {
       logout: 'Cerrar Sesión'
     },
     home: {
-      play_random: 'Jugar Random',
+      play_random: 'Jugar Aleatorio',
+      play_random_desc: '¡Desafía a un oponente aleatorio y demuestra tus conocimientos!',
       top_topics: 'Temas Más Jugados',
       weekly_topic: 'Tema Semanal',
       duels_remaining: 'Duelos Restantes',
+      games_remaining: 'Partidas',
       unlimited: 'Ilimitado',
       premium_status: 'Estado Premium',
-      dnd_mode: 'No Molestar'
+      dnd_mode: 'No Molestar',
+      store: 'Tienda',
+      store_desc: '50 partidas por $99 MXN',
+      go_to_store: 'Ir a la Tienda',
+      buy_games: '¡Comprar Partidas!',
+      low_games: '¡Pocas partidas! Comprar más',
+      quick_actions: 'Acciones Rápidas',
+      rankings: 'Rankings'
+    },
+    topics: {
+      'General Knowledge': 'Conocimiento General',
+      'Sports': 'Deportes',
+      'History': 'Historia',
+      'Science': 'Ciencia',
+      'Technology': 'Tecnología',
+      'Movies/TV': 'Películas/TV',
+      'Music': 'Música',
+      'Gaming': 'Videojuegos',
+      'Geography': 'Geografía',
+      'Business/Finance': 'Negocios/Finanzas'
     },
     match: {
       question: 'Pregunta',
