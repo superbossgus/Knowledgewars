@@ -264,9 +264,9 @@ export default function LobbyPage() {
           )}
           
           {/* Show selected topic */}
-          <div className="mt-4 p-3 rounded-xl bg-muted/20 border border-[hsl(220,100%,50%,0.2)]">
-            <span className="text-sm text-muted-foreground">{t('lobby.playing_topic')}: </span>
-            <span className="text-sm font-bold text-white">
+          <div className="mt-4 p-4 rounded-xl bg-[hsl(25,100%,50%,0.15)] border-2 border-[hsl(25,100%,50%,0.4)]">
+            <span className="text-base text-white font-medium">{t('lobby.playing_topic')}: </span>
+            <span className="text-lg font-extrabold text-[hsl(25,100%,60%)]" style={{ textShadow: '0 0 10px hsl(25 100% 50% / 0.5)' }}>
               {topicMode === 'custom' && customTopic ? customTopic : translateTopic(selectedTopic)}
             </span>
           </div>
