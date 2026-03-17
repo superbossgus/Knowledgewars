@@ -59,12 +59,12 @@ export default function LobbyPage() {
         language: user?.language || 'es'
       });
       
-      toast.success(`Challenge sent! Topic: ${selectedTopic}`);
+      toast.success(`${t('lobby.challenge_sent')} ${t('lobby.challenge_topic')}: ${translateTopic(selectedTopic)}`);
       setTimeout(() => {
         navigate('/home');
       }, 1500);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create match');
+      toast.error(error.response?.data?.detail || t('lobby.challenge_failed'));
     } finally {
       setChallenging(false);
     }
@@ -72,7 +72,7 @@ export default function LobbyPage() {
 
   const handleRandomMatch = async () => {
     if (onlineUsers.length === 0) {
-      toast.error('No online users available');
+      toast.error(t('lobby.no_users'));
       return;
     }
     
