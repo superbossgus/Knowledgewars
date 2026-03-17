@@ -133,7 +133,8 @@ class CreditBugTester:
             self.log("Failed to get credits before match creation", "FAIL")
             return None
         
-        # Create match
+        # Create match (needs longer timeout for LLM question generation)
+        self.log("Creating match (this may take 30-60s for question generation)...", "INFO")
         success, response = self.run_test(
             "Create match challenge",
             "POST",
@@ -144,7 +145,8 @@ class CreditBugTester:
                 "topic": "General Knowledge",
                 "language": "es"
             },
-            token=challenger_token
+            token=challenger_token,
+            timeout=90
         )
         
         if not success:
