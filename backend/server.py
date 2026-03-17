@@ -887,7 +887,7 @@ async def get_admin_stats(admin: bool = Depends(verify_admin)):
 
 @app.get("/api/users/online")
 async def get_online_users(current_user: dict = Depends(get_current_user)):
-    """Get list of online users for matchmaking (based on recent activity)"""
+    """Get list of online users for matchmaking (filtered by same tier)"""
     # Consider users online if they've been active in the last 5 minutes
     five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     
@@ -897,18 +897,24 @@ async def get_online_users(current_user: dict = Depends(get_current_user)):
         {"$set": {"last_seen": datetime.utcnow()}}
     )
     
-    # Find recently active users (excluding current user and DND users)
+    # Get current user's ELO tier range for matchmaking
+    current_elo = current_user.get("elo_rating", 500)
+    tier_min, tier_max = ELOCalculator.get_tier_range(current_elo)
+    
+    # Find recently active users in the same tier (excluding current user and DND users)
     users = users_col.find(
         {
             "_id": {"$ne": ObjectId(current_user["id"])},
             "dnd_enabled": False,
-            "last_seen": {"$gte": five_minutes_ago}
+            "last_seen": {"$gte": five_minutes_ago},
+            "elo_rating": {"$gte": tier_min, "$lte": tier_max}
         },
         {
             "display_name": 1,
             "country_code": 1,
             "elo_rating": 1,
             "league": 1,
+            "rank_name": 1,
             "favorite_topic": 1,
             "last_seen": 1
         }
