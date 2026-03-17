@@ -114,12 +114,40 @@ Phase 2 User Stories
 - Ads: AdMob (nativo) o AdSense (web) cuando se habilite
 - Anti-cheat avanzada, Observabilidad (traces/metrics), PWA install prompts, offline cache for static assets
 
-## 3) Status: 🔄 BRAND IDENTITY REDESIGN IN PROGRESS
+## 3) Status: ✅ MATCHMAKING BUG FIXED
 
 **Phase 1 POC:** ✅ All core tests passed (OpenAI, WebSocket, Stripe, ELO)
 **Phase 2 Main App:** ✅ Full implementation completed
 **Phase 2 Testing:** ✅ 100% success rate (20/20 tests passed)
 **Deployment Check:** ✅ PASS - Ready for Kubernetes deployment
+
+---
+
+### Phase 8: Matchmaking Bug Fix (Status: COMPLETED ✅)
+
+**Bug Reported:**
+- User challenged opponent but credits were deducted before acceptance
+- Opponent did not receive challenge notification
+- Game was unplayable
+
+**Fixes Implemented:**
+- [x] Credits ONLY deducted when match is ACCEPTED (not on creation)
+- [x] Fixed route ordering: `/api/matches/pending` now BEFORE `/api/matches/{match_id}`
+- [x] Added WebSocket endpoint `/ws/notify/{user_id}` for real-time notifications
+- [x] Added WebSocket connection hook in frontend (`useNotificationSocket`)
+- [x] Polling backup every 3 seconds for reliability
+- [x] Better notification UI with sound effects
+- [x] Added favicon.svg with Knowledge Wars branding
+
+**Test Results (100% success):**
+- Credits: 20 → 20 on match creation (no deduction)
+- Credits: 20 → 19 for BOTH players on match acceptance
+- Credits: 19 → 19 on match rejection (no deduction)
+- /api/matches/pending: Returns 200 (not 500)
+
+**Test Accounts Created:**
+- test1@knowledgewars.app / test123 (TestPlayer1)
+- test2@knowledgewars.app / test123 (TestPlayer2)
 
 ---
 
