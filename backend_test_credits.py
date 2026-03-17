@@ -25,7 +25,7 @@ class CreditBugTester:
         icons = {"INFO": "ℹ️", "PASS": "✅", "FAIL": "❌", "WARN": "⚠️"}
         print(f"{icons.get(status, 'ℹ️')} {message}")
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, token=None, check_response=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, token=None, check_response=None, timeout=15):
         """Run a single API test"""
         url = f"{self.base_url}/{endpoint}"
         headers = {'Content-Type': 'application/json'}
@@ -37,11 +37,11 @@ class CreditBugTester:
         
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers, timeout=15)
+                response = requests.get(url, headers=headers, timeout=timeout)
             elif method == 'POST':
-                response = requests.post(url, json=data, headers=headers, timeout=15)
+                response = requests.post(url, json=data, headers=headers, timeout=timeout)
             elif method == 'PATCH':
-                response = requests.patch(url, json=data, headers=headers, timeout=15)
+                response = requests.patch(url, json=data, headers=headers, timeout=timeout)
 
             success = response.status_code == expected_status
             
