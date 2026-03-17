@@ -174,11 +174,11 @@ export default function LobbyPage() {
           <div className="flex items-center gap-4">
             <p className="text-[hsl(220,100%,70%)] font-medium">{t('lobby.find_opponent')}</p>
             <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-muted/30 border border-[hsl(220,100%,50%,0.3)]">
-              <span className="text-xs text-muted-foreground">{t('lobby.your_tier')}:</span>
+              <span className="text-xs text-white/70">{t('lobby.your_tier')}:</span>
               <EloBadge tier={user?.rank_tier || user?.league || 'bronce'} rankName={user?.rank_name} showLabel={true} />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">{t('lobby.matchmaking_tier')}</p>
+          <p className="text-sm text-white/60 mt-2 font-medium">{t('lobby.matchmaking_tier')}</p>
         </motion.div>
 
         {/* Topic Selection */}
