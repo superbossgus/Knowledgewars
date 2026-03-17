@@ -257,7 +257,7 @@ export default function MatchPage() {
         >
           <div className="text-sm text-[hsl(25,100%,50%)] mb-3 font-bold font-brand uppercase tracking-wide">
             <Zap className="w-4 h-4 inline mr-1" />
-            Question {currentQuestion + 1} / 10
+            Pregunta {currentQuestion + 1} / 10
           </div>
           <div className="text-xl md:text-2xl font-bold text-white leading-relaxed" data-testid="match-question-text">
             {question.question}
