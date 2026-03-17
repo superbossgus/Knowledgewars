@@ -365,7 +365,7 @@ async def process_google_session(data: GoogleSessionRequest, response: Response)
 
 @app.get("/api/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    """Get current user profile"""
+    """Get current user profile with rank info"""
     # Update last_seen timestamp
     user_id = current_user.get("id") or current_user.get("user_id")
     if user_id:
@@ -380,7 +380,18 @@ async def get_me(current_user: dict = Depends(get_current_user)):
                 {"user_id": user_id},
                 {"$set": {"last_seen": datetime.utcnow()}}
             )
-    return serialize_doc(current_user)
+    
+    # Add rank info to response
+    elo = current_user.get("elo_rating", 500)
+    rank_info = ELOCalculator.get_rank(elo)
+    progress_info = ELOCalculator.get_progress_to_next_rank(elo)
+    
+    user_data = serialize_doc(current_user)
+    user_data["rank_name"] = rank_info['name']
+    user_data["rank_tier"] = rank_info['tier']
+    user_data["rank_progress"] = progress_info
+    
+    return user_data
 
 
 @app.post("/api/auth/logout")
