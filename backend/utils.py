@@ -73,47 +73,140 @@ def serialize_doc(doc: Any) -> Any:
 
 
 class ELOCalculator:
-    """ELO rating calculator for Knowledge Wars"""
+    """ELO rating calculator for Knowledge Wars - New Ranking System"""
     
-    LEAGUES = {
-        'bronce': (0, 999),
-        'plata': (1000, 1199),
-        'oro': (1200, 1399),
-        'diamante': (1400, 1599),
-        'maestro': (1600, 1799),
-        'gran_maestro': (1800, float('inf'))
+    # Starting ELO for new players
+    STARTING_ELO = 500
+    
+    # Points per result
+    WIN_POINTS = 2
+    LOSS_POINTS = -1
+    
+    # All ranks from lowest to highest (each 50 ELO points)
+    RANKS = [
+        # Bronce (500-649)
+        {'name': 'BRONCE III', 'min': 500, 'max': 549, 'tier': 'bronce', 'tier_num': 1},
+        {'name': 'BRONCE II', 'min': 550, 'max': 599, 'tier': 'bronce', 'tier_num': 1},
+        {'name': 'BRONCE I', 'min': 600, 'max': 649, 'tier': 'bronce', 'tier_num': 1},
+        # Plata (650-799)
+        {'name': 'PLATA III', 'min': 650, 'max': 699, 'tier': 'plata', 'tier_num': 2},
+        {'name': 'PLATA II', 'min': 700, 'max': 749, 'tier': 'plata', 'tier_num': 2},
+        {'name': 'PLATA I', 'min': 750, 'max': 799, 'tier': 'plata', 'tier_num': 2},
+        # Oro (800-949)
+        {'name': 'ORO III', 'min': 800, 'max': 849, 'tier': 'oro', 'tier_num': 3},
+        {'name': 'ORO II', 'min': 850, 'max': 899, 'tier': 'oro', 'tier_num': 3},
+        {'name': 'ORO I', 'min': 900, 'max': 949, 'tier': 'oro', 'tier_num': 3},
+        # Platino (950-1099)
+        {'name': 'PLATINO III', 'min': 950, 'max': 999, 'tier': 'platino', 'tier_num': 4},
+        {'name': 'PLATINO II', 'min': 1000, 'max': 1049, 'tier': 'platino', 'tier_num': 4},
+        {'name': 'PLATINO I', 'min': 1050, 'max': 1099, 'tier': 'platino', 'tier_num': 4},
+        # Diamante (1100-1249)
+        {'name': 'DIAMANTE III', 'min': 1100, 'max': 1149, 'tier': 'diamante', 'tier_num': 5},
+        {'name': 'DIAMANTE II', 'min': 1150, 'max': 1199, 'tier': 'diamante', 'tier_num': 5},
+        {'name': 'DIAMANTE I', 'min': 1200, 'max': 1249, 'tier': 'diamante', 'tier_num': 5},
+        # Maestro (1250-1399)
+        {'name': 'MAESTRO III', 'min': 1250, 'max': 1299, 'tier': 'maestro', 'tier_num': 6},
+        {'name': 'MAESTRO II', 'min': 1300, 'max': 1349, 'tier': 'maestro', 'tier_num': 6},
+        {'name': 'MAESTRO I', 'min': 1350, 'max': 1399, 'tier': 'maestro', 'tier_num': 6},
+        # Campeón (1400-1549)
+        {'name': 'CAMPEÓN III', 'min': 1400, 'max': 1449, 'tier': 'campeon', 'tier_num': 7},
+        {'name': 'CAMPEÓN II', 'min': 1450, 'max': 1499, 'tier': 'campeon', 'tier_num': 7},
+        {'name': 'CAMPEÓN I', 'min': 1500, 'max': 1549, 'tier': 'campeon', 'tier_num': 7},
+        # Gran Maestro (1550-1699)
+        {'name': 'GRAN MAESTRO III', 'min': 1550, 'max': 1599, 'tier': 'gran_maestro', 'tier_num': 8},
+        {'name': 'GRAN MAESTRO II', 'min': 1600, 'max': 1649, 'tier': 'gran_maestro', 'tier_num': 8},
+        {'name': 'GRAN MAESTRO I', 'min': 1650, 'max': 1699, 'tier': 'gran_maestro', 'tier_num': 8},
+        # Genio del Conocimiento (1700+)
+        {'name': 'GENIO DEL CONOCIMIENTO', 'min': 1700, 'max': float('inf'), 'tier': 'genio', 'tier_num': 9},
+    ]
+    
+    # Tier ranges for matchmaking
+    TIER_RANGES = {
+        'bronce': (500, 649),
+        'plata': (650, 799),
+        'oro': (800, 949),
+        'platino': (950, 1099),
+        'diamante': (1100, 1249),
+        'maestro': (1250, 1399),
+        'campeon': (1400, 1549),
+        'gran_maestro': (1550, 1699),
+        'genio': (1700, float('inf'))
     }
     
     @staticmethod
-    def calculate_elo_change(rating_a: int, rating_b: int, score_a: float, k_factor: int = 32) -> Tuple[int, int]:
+    def calculate_elo_change(winner: bool) -> int:
         """
-        Calculate ELO change for both players
+        Calculate ELO change based on win/loss
         
         Args:
-            rating_a: Current ELO of player A
-            rating_b: Current ELO of player B
-            score_a: Actual score (1.0 = A wins, 0.5 = draw, 0.0 = B wins)
-            k_factor: K-factor (higher = more volatile changes)
+            winner: True if player won, False if lost
         
         Returns:
-            (delta_a, delta_b): ELO changes for both players
+            ELO change (positive for win, negative for loss)
         """
-        # Expected score for player A
-        expected_a = 1 / (1 + 10 ** ((rating_b - rating_a) / 400))
+        return ELOCalculator.WIN_POINTS if winner else ELOCalculator.LOSS_POINTS
+    
+    @staticmethod
+    def get_rank(rating: int) -> dict:
+        """Get full rank info from rating"""
+        # Handle below minimum
+        if rating < 500:
+            return ELOCalculator.RANKS[0]
         
-        # ELO change
-        delta_a = round(k_factor * (score_a - expected_a))
-        delta_b = -delta_a
+        for rank in ELOCalculator.RANKS:
+            if rank['min'] <= rating <= rank['max']:
+                return rank
         
-        return delta_a, delta_b
+        # Default to highest rank if above max
+        return ELOCalculator.RANKS[-1]
+    
+    @staticmethod
+    def get_rank_name(rating: int) -> str:
+        """Get rank name from rating"""
+        return ELOCalculator.get_rank(rating)['name']
+    
+    @staticmethod
+    def get_tier(rating: int) -> str:
+        """Get tier name from rating (for matchmaking)"""
+        return ELOCalculator.get_rank(rating)['tier']
+    
+    @staticmethod
+    def get_tier_range(rating: int) -> tuple:
+        """Get the ELO range for matchmaking based on player's tier"""
+        tier = ELOCalculator.get_tier(rating)
+        return ELOCalculator.TIER_RANGES.get(tier, (500, 649))
     
     @staticmethod
     def get_league(rating: int) -> str:
-        """Get league name from rating"""
-        for league, (min_rating, max_rating) in ELOCalculator.LEAGUES.items():
-            if min_rating <= rating <= max_rating:
-                return league
-        return 'bronce'
+        """Get league name from rating (legacy compatibility)"""
+        return ELOCalculator.get_tier(rating)
+    
+    @staticmethod
+    def get_progress_to_next_rank(rating: int) -> dict:
+        """Get progress info towards next rank"""
+        rank = ELOCalculator.get_rank(rating)
+        rank_index = ELOCalculator.RANKS.index(rank)
+        
+        # If at max rank
+        if rank_index == len(ELOCalculator.RANKS) - 1:
+            return {
+                'current_rank': rank['name'],
+                'next_rank': None,
+                'progress': 100,
+                'points_to_next': 0
+            }
+        
+        next_rank = ELOCalculator.RANKS[rank_index + 1]
+        points_in_current = rating - rank['min']
+        points_needed = rank['max'] - rank['min'] + 1  # 50 points per rank
+        progress = min(100, int((points_in_current / points_needed) * 100))
+        
+        return {
+            'current_rank': rank['name'],
+            'next_rank': next_rank['name'],
+            'progress': progress,
+            'points_to_next': next_rank['min'] - rating
+        }
 
 
 class QuestionGenerator:
