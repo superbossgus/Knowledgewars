@@ -179,6 +179,10 @@ async def register(user_data: UserCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    # Get initial rank info for new users (500 ELO = BRONCE III)
+    initial_elo = 500
+    initial_rank = ELOCalculator.get_rank(initial_elo)
+    
     # Create user with game credits system
     # New users start with 5 FREE games to try the app
     user_doc = {
@@ -189,8 +193,9 @@ async def register(user_data: UserCreate):
         "favorite_topic": user_data.favorite_topic,
         "language": user_data.language,
         "dnd_enabled": False,
-        "elo_rating": 500,
-        "league": "plata",
+        "elo_rating": initial_elo,
+        "league": initial_rank['tier'],
+        "rank_name": initial_rank['name'],
         "created_at": datetime.utcnow(),
         "last_seen": datetime.utcnow(),
         "wins": 0,
@@ -209,9 +214,15 @@ async def register(user_data: UserCreate):
     # Create JWT token
     token = create_access_token({"user_id": str(result.inserted_id)})
     
+    # Add rank progress info to response
+    progress_info = ELOCalculator.get_progress_to_next_rank(initial_elo)
+    user_data_response = serialize_doc(user_doc)
+    user_data_response["rank_tier"] = initial_rank['tier']
+    user_data_response["rank_progress"] = progress_info
+    
     return {
         "token": token,
-        "user": serialize_doc(user_doc)
+        "user": user_data_response
     }
 
 
