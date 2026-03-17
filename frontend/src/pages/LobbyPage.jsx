@@ -178,7 +178,7 @@ export default function LobbyPage() {
               <EloBadge tier={user?.rank_tier || user?.league || 'bronce'} rankName={user?.rank_name} showLabel={true} />
             </div>
           </div>
-          <p className="text-sm text-white/60 mt-2 font-medium">{t('lobby.matchmaking_tier')}</p>
+          <p className="text-sm text-[hsl(220,100%,80%)] mt-2 font-semibold">{t('lobby.matchmaking_tier')}</p>
         </motion.div>
 
         {/* Topic Selection */}
