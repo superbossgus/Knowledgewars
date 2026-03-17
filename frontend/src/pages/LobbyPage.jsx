@@ -36,6 +36,9 @@ export default function LobbyPage() {
   const [topicMode, setTopicMode] = useState('list'); // 'list' or 'custom'
   const [loading, setLoading] = useState(true);
   const [challenging, setChallenging] = useState(false);
+  const [showAllRanks, setShowAllRanks] = useState(false); // Show all ranks or just my tier
+  const [searchUsername, setSearchUsername] = useState(''); // Search by username
+  const [searchResults, setSearchResults] = useState(null); // Search results
 
   // Change language based on user preference
   useEffect(() => {
@@ -63,11 +66,12 @@ export default function LobbyPage() {
     loadOnlineUsers();
     const interval = setInterval(loadOnlineUsers, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showAllRanks]);
 
   const loadOnlineUsers = async () => {
     try {
-      const response = await api.get('/api/users/online');
+      const endpoint = showAllRanks ? '/api/users/online?all_ranks=true' : '/api/users/online';
+      const response = await api.get(endpoint);
       setOnlineUsers(response.data.users || []);
     } catch (error) {
       console.error('Failed to load online users');
@@ -75,6 +79,34 @@ export default function LobbyPage() {
       setLoading(false);
     }
   };
+
+  // Search for a specific user by username
+  const handleSearchUser = async () => {
+    if (!searchUsername.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    
+    try {
+      const response = await api.get(`/api/users/search?username=${encodeURIComponent(searchUsername.trim())}`);
+      setSearchResults(response.data.users || []);
+    } catch (error) {
+      console.error('Failed to search users');
+      setSearchResults([]);
+    }
+  };
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchUsername.trim()) {
+        handleSearchUser();
+      } else {
+        setSearchResults(null);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchUsername]);
 
   const handleChallenge = async (opponentId) => {
     const finalTopic = getFinalTopic();
