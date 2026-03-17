@@ -226,7 +226,8 @@ class CreditBugTester:
         """Test that rejecting a match does NOT deduct credits"""
         self.log("\n🚫 Testing credit deduction on match rejection...", "INFO")
         
-        # Create a new match
+        # Create a new match (needs longer timeout for LLM)
+        self.log("Creating match for rejection test (this may take 30-60s)...", "INFO")
         success, response = self.run_test(
             "Create match for rejection test",
             "POST",
@@ -237,7 +238,8 @@ class CreditBugTester:
                 "topic": "Science",
                 "language": "es"
             },
-            token=challenger_token
+            token=challenger_token,
+            timeout=90
         )
         
         if not success:
