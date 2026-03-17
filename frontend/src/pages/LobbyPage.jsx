@@ -77,15 +77,22 @@ export default function LobbyPage() {
   };
 
   const handleChallenge = async (opponentId) => {
+    const finalTopic = getFinalTopic();
+    
+    if (!finalTopic) {
+      toast.error(t('lobby.enter_topic'));
+      return;
+    }
+    
     setChallenging(true);
     try {
       const response = await api.post('/api/matches/create', {
         opponent_id: opponentId,
-        topic: selectedTopic,
+        topic: finalTopic,
         language: user?.language || 'es'
       });
       
-      toast.success(`${t('lobby.challenge_sent')} ${t('lobby.challenge_topic')}: ${translateTopic(selectedTopic)}`);
+      toast.success(`${t('lobby.challenge_sent')} ${t('lobby.challenge_topic')}: ${finalTopic}`);
       setTimeout(() => {
         navigate('/home');
       }, 1500);
@@ -99,6 +106,12 @@ export default function LobbyPage() {
   const handleRandomMatch = async () => {
     if (onlineUsers.length === 0) {
       toast.error(t('lobby.no_users'));
+      return;
+    }
+    
+    const finalTopic = getFinalTopic();
+    if (!finalTopic) {
+      toast.error(t('lobby.enter_topic'));
       return;
     }
     
