@@ -222,7 +222,7 @@ export default function HomePage() {
                   onClick={() => navigate('/lobby', { state: { topic: topic.topic } })}
                   className="text-left px-4 py-3 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.15)] border border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all text-sm font-medium text-white"
                 >
-                  {topic.topic}
+                  {translateTopic(topic.topic)}
                 </button>
               ))}
             </div>
