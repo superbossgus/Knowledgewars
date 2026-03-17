@@ -109,7 +109,12 @@ export default function HomePage() {
           </div>
           
           <div className="flex items-center gap-3">
-            <EloBadge tier={user?.league || 'bronce'} />
+            <EloBadge 
+              tier={user?.rank_tier || user?.league || 'bronce'} 
+              rankName={user?.rank_name}
+              elo={user?.elo_rating}
+              showElo={true}
+            />
             <button
               onClick={handleLogout}
               className="p-2 rounded-xl bg-muted/30 hover:bg-muted/50 transition-all border border-[hsl(220,100%,50%,0.2)] hover:border-[hsl(220,100%,50%,0.4)]"
