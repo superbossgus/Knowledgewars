@@ -93,14 +93,14 @@ export default function LobbyPage() {
             className="flex items-center gap-2 text-[hsl(220,100%,70%)] hover:text-white mb-4 transition-colors font-medium"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Home
+            {t('lobby.back_home')}
           </button>
           
           <div className="flex items-center gap-3 mb-2">
             <Shield className="w-8 h-8 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 8px hsl(220 100% 50%))' }} />
-            <h1 className="text-3xl md:text-4xl font-extrabold font-brand text-white">Matchmaking</h1>
+            <h1 className="text-3xl md:text-4xl font-extrabold font-brand text-white">{t('lobby.matchmaking')}</h1>
           </div>
-          <p className="text-[hsl(220,100%,70%)] font-medium">Find an opponent and start dueling!</p>
+          <p className="text-[hsl(220,100%,70%)] font-medium">{t('lobby.find_opponent')}</p>
         </motion.div>
 
         {/* Topic Selection */}
