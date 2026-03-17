@@ -76,7 +76,10 @@ const resources = {
       'Music': 'Música',
       'Gaming': 'Videojuegos',
       'Geography': 'Geografía',
-      'Business/Finance': 'Negocios/Finanzas'
+      'Business/Finance': 'Negocios/Finanzas',
+      'Art & Literature': 'Arte y Literatura',
+      'Food & Cuisine': 'Comida y Cocina',
+      'Animals & Nature': 'Animales y Naturaleza'
     },
     match: {
       question: 'Pregunta',
