@@ -239,7 +239,7 @@ function AppContent() {
       toast.success(response.data.message || '¡Desafío aceptado!');
       setPendingChallenge(null);
       // Use navigate instead of window.location for smoother transition
-      window.location.href = `/match/${pendingChallenge.id}`;
+      navigate(`/match/${pendingChallenge.id}`);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Error al aceptar el desafío');
       setPendingChallenge(null); // Clear the challenge if it failed (expired, etc.)
@@ -259,74 +259,80 @@ function AppContent() {
   };
 
   return (
-    <BrowserRouter>
-      <div className="App">
-        <AnimatePresence>
-          {pendingChallenge && (
-            <ChallengeNotification
-              challenge={pendingChallenge}
-              onAccept={handleAcceptChallenge}
-              onReject={handleRejectChallenge}
-            />
-          )}
-        </AnimatePresence>
+    <div className="App">
+      <AnimatePresence>
+        {pendingChallenge && (
+          <ChallengeNotification
+            challenge={pendingChallenge}
+            onAccept={handleAcceptChallenge}
+            onReject={handleRejectChallenge}
+          />
+        )}
+      </AnimatePresence>
 
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/home"
-            element={
-              <ProtectedRoute>
-                <HomePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/lobby"
-            element={
-              <ProtectedRoute>
-                <LobbyPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/match/:matchId"
-            element={
-              <ProtectedRoute>
-                <MatchPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/results/:matchId"
-            element={
-              <ProtectedRoute>
-                <ResultsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/rankings"
-            element={
-              <ProtectedRoute>
-                <RankingsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/store"
-            element={
-              <ProtectedRoute>
-                <StorePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/" element={<Navigate to="/home" replace />} />
-        </Routes>
-        <Toaster position="top-center" richColors />
-      </div>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <HomePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/lobby"
+          element={
+            <ProtectedRoute>
+              <LobbyPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/match/:matchId"
+          element={
+            <ProtectedRoute>
+              <MatchPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/results/:matchId"
+          element={
+            <ProtectedRoute>
+              <ResultsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/rankings"
+          element={
+            <ProtectedRoute>
+              <RankingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/store"
+          element={
+            <ProtectedRoute>
+              <StorePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
+      </Routes>
+      <Toaster position="top-center" richColors />
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
     </BrowserRouter>
   );
 }
