@@ -1395,6 +1395,49 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
         manager.disconnect(user_id)
 
 
+@app.websocket("/ws/notify/{user_id}")
+async def websocket_notifications(websocket: WebSocket, user_id: str, token: str):
+    """WebSocket endpoint for real-time notifications (challenges, match updates, etc.)"""
+    # Authenticate
+    payload = decode_access_token(token)
+    if not payload:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    
+    # Verify user_id matches token
+    if payload["user_id"] != user_id:
+        await websocket.close(code=1008, reason="User ID mismatch")
+        return
+    
+    await manager.connect(user_id, websocket)
+    print(f"🔔 User {user_id} connected for notifications")
+    
+    try:
+        # Send connection confirmation
+        await websocket.send_json({
+            "type": "connected",
+            "message": "Connected to notification service"
+        })
+        
+        # Keep connection alive and listen for any messages
+        while True:
+            try:
+                data = await websocket.receive_json()
+                # Handle any client-side messages if needed
+                if data.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except Exception:
+                # If receive fails, just continue (might be a disconnect)
+                break
+    
+    except WebSocketDisconnect:
+        print(f"🔔 User {user_id} disconnected from notifications")
+        manager.disconnect(user_id)
+    except Exception as e:
+        print(f"Notification WebSocket error for user {user_id}: {e}")
+        manager.disconnect(user_id)
+
+
 async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     """Handle answer submission in real-time"""
     match = matches_col.find_one({"_id": ObjectId(match_id)})
