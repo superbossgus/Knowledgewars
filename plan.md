@@ -216,6 +216,61 @@ Phase 2 User Stories
 - `/app/backend/server.py` - Added Google OAuth endpoints and session management
 - `/app/frontend/src/pages/LoginPage.jsx` - Added Google button and remember me checkbox
 
+---
+
+## Phase 7: Game Credits & Coupons System (Status: COMPLETED ✅)
+
+**Implemented:**
+
+### Nuevo Modelo de Monetización:
+- [x] 50 partidas por $99 MXN
+- [x] Contador de partidas por cuenta
+- [x] 5 partidas gratis para nuevos usuarios
+- [x] Aviso cuando quedan 5 partidas o menos
+- [x] Bloqueo cuando se agotan las partidas
+
+### Sistema de Cupones:
+- [x] Cupones de partidas gratis (ej: 10 partidas gratis)
+- [x] Cupones de descuento porcentual (ej: 20% off)
+- [x] Límite de usos por cupón
+- [x] Fecha de expiración configurable
+- [x] Un solo uso por usuario por cupón
+
+### Recuperación de Contraseña:
+- [x] Endpoint `/api/auth/forgot-password` - genera código de 6 dígitos
+- [x] Endpoint `/api/auth/verify-reset-code` - verifica el código
+- [x] Endpoint `/api/auth/reset-password` - cambia la contraseña
+- [x] Expiración de código a 15 minutos
+- [x] UI completa de 4 pasos en `/forgot-password`
+
+### Panel de Administrador:
+- [x] Login con clave secreta (`/admin`)
+- [x] Dashboard con estadísticas (usuarios, partidas, ingresos, cupones)
+- [x] CRUD completo de cupones
+- [x] Activar/Desactivar cupones
+- [x] Ver usos de cada cupón
+
+### Nuevas Páginas:
+- [x] `/store` - Tienda de partidas con cupones
+- [x] `/forgot-password` - Recuperación de contraseña
+- [x] `/admin` - Panel de administrador
+
+### API Endpoints Nuevos:
+- `GET /api/users/credits` - Estado de créditos del usuario
+- `POST /api/coupons/redeem` - Canjear cupón
+- `POST /api/games/purchase` - Iniciar compra
+- `POST /api/games/confirm-purchase/{id}` - Confirmar compra
+- `POST /api/games/use-credit` - Usar 1 crédito (al jugar)
+- `POST /api/admin/coupons/create` - Crear cupón (Admin)
+- `GET /api/admin/coupons` - Listar cupones (Admin)
+- `PATCH /api/admin/coupons/{code}/toggle` - Activar/Desactivar (Admin)
+- `DELETE /api/admin/coupons/{code}` - Eliminar cupón (Admin)
+- `GET /api/admin/stats` - Estadísticas (Admin)
+
+### Cupones Creados de Ejemplo:
+- `GRATIS10` - 10 partidas gratis
+- `DESC20` - 20% de descuento
+
 ## 4) Success Criteria
 - POC: All core tests pass; valid cached question sets in 3 languages; WS duel loop deterministic; Stripe checkout + webhook updates DB
 - MVP: End-to-end flows functional (auth→match→results→leaderboards→paywall→purchase→entitlements), multilanguage UI polished, caches stable, limits enforced
