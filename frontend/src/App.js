@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore } from './store/store';
 import api from './lib/api';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Swords, X, Shield } from 'lucide-react';
+import { Swords, X, Shield, Bell } from 'lucide-react';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import LobbyPage from './pages/LobbyPage';
