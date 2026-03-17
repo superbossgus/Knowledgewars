@@ -43,6 +43,18 @@ const resources = {
       quick_actions: 'Acciones Rápidas',
       rankings: 'Rankings'
     },
+    lobby: {
+      back_home: 'Volver al Inicio',
+      matchmaking: 'Buscar Oponente',
+      find_opponent: '¡Encuentra un oponente y comienza a jugar!',
+      select_topic: 'Seleccionar Tema',
+      play_random: 'Jugar Partida Aleatoria',
+      challenge_random: '¡Retar a un oponente aleatorio ahora!',
+      online_players: 'Jugadores en Línea',
+      no_online: 'No hay jugadores en línea ahora',
+      challenge: 'Retar',
+      no_users: 'No hay usuarios disponibles'
+    },
     topics: {
       'General Knowledge': 'Conocimiento General',
       'Sports': 'Deportes',
