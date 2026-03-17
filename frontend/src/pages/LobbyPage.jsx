@@ -366,9 +366,9 @@ export default function LobbyPage() {
 
           {/* Players list */}
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
+            <div className="text-center py-8 text-white/70 font-medium">{t('common.loading')}</div>
           ) : (searchResults !== null ? searchResults : onlineUsers).length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-white/70 font-medium text-lg">
               {searchUsername ? t('lobby.search_not_found') : t('lobby.no_online')}
             </div>
           ) : (
