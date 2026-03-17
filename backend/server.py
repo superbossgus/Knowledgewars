@@ -1285,20 +1285,6 @@ async def cancel_match(match_id: str, current_user: dict = Depends(get_current_u
     return {"success": True, "message": "Desafío cancelado"}
 
 
-@app.get("/api/matches/{match_id}")
-async def get_match(match_id: str, current_user: dict = Depends(get_current_user)):
-    """Get match details"""
-    match = matches_col.find_one({"_id": ObjectId(match_id)})
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
-    
-    # Check authorization
-    if str(match["player_a_id"]) not in [current_user["id"]] and str(match["player_b_id"]) not in [current_user["id"]]:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
-    return {"match": serialize_doc(match)}
-
-
 @app.get("/api/matches/pending")
 async def get_pending_matches(current_user: dict = Depends(get_current_user)):
     """Get pending match challenges for current user - excludes expired ones"""
@@ -1335,6 +1321,20 @@ async def get_pending_matches(current_user: dict = Depends(get_current_user)):
     ).sort("created_at", DESCENDING).limit(10))
     
     return {"matches": serialize_doc(matches)}
+
+
+@app.get("/api/matches/{match_id}")
+async def get_match(match_id: str, current_user: dict = Depends(get_current_user)):
+    """Get match details"""
+    match = matches_col.find_one({"_id": ObjectId(match_id)})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    # Check authorization
+    if str(match["player_a_id"]) not in [current_user["id"]] and str(match["player_b_id"]) not in [current_user["id"]]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    return {"match": serialize_doc(match)}
 
 
 # ============================================================================
