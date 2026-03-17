@@ -178,13 +178,13 @@ export default function LobbyPage() {
                     <div>
                       <div className="font-bold text-white text-lg">{player.display_name}</div>
                       <div className="text-sm text-[hsl(45,92%,48%)] font-semibold">
-                        {player.elo_rating} ELO
+                        {player.rank_name || player.league?.toUpperCase()} • {player.elo_rating} ELO
                       </div>
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-3">
-                    <EloBadge tier={player.league} showLabel={false} />
+                    <EloBadge tier={player.league} rankName={player.rank_name} showLabel={false} />
                     <button
                       onClick={() => handleChallenge(player.id)}
                       disabled={challenging}
