@@ -235,7 +235,7 @@ export default function HomePage() {
                 className="p-5 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.15)] border border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all text-center"
               >
                 <Trophy className="w-8 h-8 mx-auto mb-2 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(220 100% 50%))' }} />
-                <span className="text-sm font-bold text-white">Rankings</span>
+                <span className="text-sm font-bold text-white">{t('home.rankings')}</span>
               </button>
               <button
                 onClick={() => navigate('/store')}
