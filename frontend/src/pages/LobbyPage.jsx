@@ -298,20 +298,82 @@ export default function LobbyPage() {
           className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6"
           style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
         >
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">
-            <Users className="w-6 h-6 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(220 100% 50%))' }} />
-            {t('lobby.online_players')} ({onlineUsers.length})
-          </h2>
+          {/* Header with title and controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+              <Users className="w-6 h-6 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(220 100% 50%))' }} />
+              {t('lobby.online_players')} ({searchResults ? searchResults.length : onlineUsers.length})
+            </h2>
+            
+            {/* Toggle for all ranks */}
+            <button
+              onClick={() => setShowAllRanks(!showAllRanks)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all ${
+                showAllRanks 
+                  ? 'bg-[hsl(25,100%,50%)] text-white' 
+                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50 border border-[hsl(220,100%,50%,0.3)]'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              {showAllRanks ? t('lobby.all_ranks') : t('lobby.my_rank_only')}
+            </button>
+          </div>
+          
+          {/* Search by username */}
+          <div className="mb-4">
+            <div className="relative">
+              <UserSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <input
+                type="text"
+                value={searchUsername}
+                onChange={(e) => setSearchUsername(e.target.value)}
+                placeholder={t('lobby.search_player')}
+                className="w-full pl-12 pr-4 py-3 bg-background/80 border-2 border-[hsl(220,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(220,100%,50%)] focus:border-[hsl(220,100%,50%)] focus:outline-none text-white font-medium transition-all placeholder:text-muted-foreground"
+              />
+              {searchUsername && (
+                <button
+                  onClick={() => setSearchUsername('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {searchUsername && searchResults !== null && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                {searchResults.length > 0 
+                  ? t('lobby.search_found', { count: searchResults.length })
+                  : t('lobby.search_not_found')
+                }
+              </div>
+            )}
+          </div>
+          
+          {/* Info message about rank filter */}
+          {!showAllRanks && !searchUsername && (
+            <div className="mb-4 p-3 rounded-xl bg-[hsl(220,100%,50%,0.1)] border border-[hsl(220,100%,50%,0.2)] text-sm text-[hsl(220,100%,70%)]">
+              <Filter className="w-4 h-4 inline mr-2" />
+              {t('lobby.matchmaking_tier')}
+            </div>
+          )}
+          
+          {showAllRanks && !searchUsername && (
+            <div className="mb-4 p-3 rounded-xl bg-[hsl(25,100%,50%,0.1)] border border-[hsl(25,100%,50%,0.2)] text-sm text-[hsl(25,100%,70%)]">
+              <Sparkles className="w-4 h-4 inline mr-2" />
+              {t('lobby.friendly_match_info')}
+            </div>
+          )}
 
+          {/* Players list */}
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">{t('common.loading')}</div>
-          ) : onlineUsers.length === 0 ? (
+          ) : (searchResults !== null ? searchResults : onlineUsers).length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {t('lobby.no_online')}
+              {searchUsername ? t('lobby.search_not_found') : t('lobby.no_online')}
             </div>
           ) : (
-            <div className="space-y-3">
-              {onlineUsers.map((player) => (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {(searchResults !== null ? searchResults : onlineUsers).map((player) => (
                 <div
                   key={player.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.1)] border border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all"
