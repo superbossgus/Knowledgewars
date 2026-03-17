@@ -1604,14 +1604,18 @@ async def finish_match(match_id: str):
     
     # Determine winner
     winner_id = None
-    score_result = 0.5  # draw
+    player_a_won = False
+    player_b_won = False
+    is_draw = False
     
     if score_a > score_b:
         winner_id = match["player_a_id"]
-        score_result = 1.0
+        player_a_won = True
     elif score_b > score_a:
         winner_id = match["player_b_id"]
-        score_result = 0.0
+        player_b_won = True
+    else:
+        is_draw = True
     
     # Get current ELO ratings
     user_a = users_col.find_one({"_id": match["player_a_id"]})
@@ -1620,11 +1624,20 @@ async def finish_match(match_id: str):
     elo_a = user_a["elo_rating"]
     elo_b = user_b["elo_rating"]
     
-    # Calculate ELO changes
-    delta_a, delta_b = ELOCalculator.calculate_elo_change(elo_a, elo_b, score_result)
+    # Calculate ELO changes using new system (+2 win, -1 loss, 0 draw)
+    if is_draw:
+        delta_a = 0
+        delta_b = 0
+    else:
+        delta_a = ELOCalculator.calculate_elo_change(player_a_won)
+        delta_b = ELOCalculator.calculate_elo_change(player_b_won)
     
-    new_elo_a = elo_a + delta_a
-    new_elo_b = elo_b + delta_b
+    new_elo_a = max(0, elo_a + delta_a)  # Don't go below 0
+    new_elo_b = max(0, elo_b + delta_b)
+    
+    # Get rank info for both players
+    rank_info_a = ELOCalculator.get_rank(new_elo_a)
+    rank_info_b = ELOCalculator.get_rank(new_elo_b)
     
     # Update users
     users_col.update_one(
@@ -1632,12 +1645,13 @@ async def finish_match(match_id: str):
         {
             "$set": {
                 "elo_rating": new_elo_a,
-                "league": ELOCalculator.get_league(new_elo_a)
+                "league": rank_info_a['tier'],
+                "rank_name": rank_info_a['name']
             },
             "$inc": {
                 "total_duels": 1,
-                "wins": 1 if score_result == 1.0 else 0,
-                "losses": 1 if score_result == 0.0 else 0
+                "wins": 1 if player_a_won else 0,
+                "losses": 1 if player_b_won else 0
             }
         }
     )
@@ -1647,12 +1661,13 @@ async def finish_match(match_id: str):
         {
             "$set": {
                 "elo_rating": new_elo_b,
-                "league": ELOCalculator.get_league(new_elo_b)
+                "league": rank_info_b['tier'],
+                "rank_name": rank_info_b['name']
             },
             "$inc": {
                 "total_duels": 1,
-                "wins": 1 if score_result == 0.0 else 0,
-                "losses": 1 if score_result == 1.0 else 0
+                "wins": 1 if player_b_won else 0,
+                "losses": 1 if player_a_won else 0
             }
         }
     )
