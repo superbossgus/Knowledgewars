@@ -169,7 +169,7 @@ export default function HomePage() {
                 onClick={() => navigate('/store')}
                 className="w-full text-sm py-2 rounded-lg bg-[hsl(25,100%,50%,0.2)] text-[hsl(25,100%,50%)] font-bold hover:bg-[hsl(25,100%,50%,0.3)] transition-colors"
               >
-                {credits?.no_credits ? '¡Comprar Partidas!' : '¡Pocas partidas! Comprar más'}
+                                {credits?.no_credits ? t('home.buy_games') : t('home.low_games')}
               </button>
             )}
           </motion.div>
