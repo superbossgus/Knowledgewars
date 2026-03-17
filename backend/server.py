@@ -918,8 +918,8 @@ async def get_admin_stats(admin: bool = Depends(verify_admin)):
 # ============================================================================
 
 @app.get("/api/users/online")
-async def get_online_users(current_user: dict = Depends(get_current_user)):
-    """Get list of online users for matchmaking (filtered by same tier)"""
+async def get_online_users(all_ranks: bool = False, current_user: dict = Depends(get_current_user)):
+    """Get list of online users for matchmaking (optionally filtered by same tier)"""
     # Consider users online if they've been active in the last 5 minutes
     five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     
@@ -929,17 +929,53 @@ async def get_online_users(current_user: dict = Depends(get_current_user)):
         {"$set": {"last_seen": datetime.utcnow()}}
     )
     
-    # Get current user's ELO tier range for matchmaking
-    current_elo = current_user.get("elo_rating", 500)
-    tier_min, tier_max = ELOCalculator.get_tier_range(current_elo)
+    # Build query
+    query = {
+        "_id": {"$ne": ObjectId(current_user["id"])},
+        "dnd_enabled": False,
+        "last_seen": {"$gte": five_minutes_ago}
+    }
     
-    # Find recently active users in the same tier (excluding current user and DND users)
+    # Filter by tier unless all_ranks is True
+    if not all_ranks:
+        current_elo = current_user.get("elo_rating", 500)
+        tier_min, tier_max = ELOCalculator.get_tier_range(current_elo)
+        query["elo_rating"] = {"$gte": tier_min, "$lte": tier_max}
+    
+    # Find users
+    users = users_col.find(
+        query,
+        {
+            "display_name": 1,
+            "country_code": 1,
+            "elo_rating": 1,
+            "league": 1,
+            "rank_name": 1,
+            "favorite_topic": 1,
+            "last_seen": 1
+        }
+    ).sort("elo_rating", DESCENDING).limit(100)
+    
+    return {"users": serialize_doc(list(users))}
+
+
+@app.get("/api/users/search")
+async def search_users(username: str, current_user: dict = Depends(get_current_user)):
+    """Search for users by username (partial match)"""
+    if not username or len(username) < 2:
+        return {"users": []}
+    
+    # Update current user's last_seen
+    users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"last_seen": datetime.utcnow()}}
+    )
+    
+    # Search for users with matching display_name (case-insensitive partial match)
     users = users_col.find(
         {
             "_id": {"$ne": ObjectId(current_user["id"])},
-            "dnd_enabled": False,
-            "last_seen": {"$gte": five_minutes_ago},
-            "elo_rating": {"$gte": tier_min, "$lte": tier_max}
+            "display_name": {"$regex": username, "$options": "i"}
         },
         {
             "display_name": 1,
@@ -950,7 +986,7 @@ async def get_online_users(current_user: dict = Depends(get_current_user)):
             "favorite_topic": 1,
             "last_seen": 1
         }
-    ).sort("last_seen", DESCENDING).limit(50)
+    ).sort("elo_rating", DESCENDING).limit(20)
     
     return {"users": serialize_doc(list(users))}
 
