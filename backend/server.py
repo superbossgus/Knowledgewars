@@ -1228,7 +1228,7 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
 
 @app.post("/api/matches/{match_id}/reject")
 async def reject_match(match_id: str, current_user: dict = Depends(get_current_user)):
-    """Reject a match challenge"""
+    """Reject a match challenge - NO credits are deducted"""
     match = matches_col.find_one({"_id": ObjectId(match_id)})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -1236,16 +1236,21 @@ async def reject_match(match_id: str, current_user: dict = Depends(get_current_u
     if str(match["player_b_id"]) != current_user["id"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    if match["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Match cannot be rejected")
+    
     # Update match status
     matches_col.update_one(
         {"_id": ObjectId(match_id)},
-        {"$set": {"status": "rejected"}}
+        {"$set": {"status": "rejected", "ended_at": datetime.utcnow()}}
     )
     
-    # Notify challenger
+    # Notify challenger that match was rejected
     await manager.send_message(str(match["player_a_id"]), {
         "type": "challenge_rejected",
-        "match_id": match_id
+        "match_id": match_id,
+        "message": f"{current_user['display_name']} rechazó tu desafío"
+    })
     })
     
     return {"success": True}
