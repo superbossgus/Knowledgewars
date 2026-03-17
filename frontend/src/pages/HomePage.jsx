@@ -40,39 +40,20 @@ export default function HomePage() {
   };
 
   const handlePlayRandom = async () => {
-    // Check if user has credits
+    // Check if user has credits (but don't deduct yet)
     if (credits?.no_credits || credits?.games_remaining <= 0) {
       toast.error('¡No tienes partidas disponibles! Compra más en la tienda.');
       navigate('/store');
       return;
     }
     
-    // Use one credit before navigating to lobby
-    try {
-      const response = await api.post('/api/games/use-credit');
-      if (!response.data.can_play) {
-        toast.error(response.data.message);
-        navigate('/store');
-        return;
-      }
-      
-      // Show warning if low on credits
-      if (response.data.warning) {
-        toast.warning(response.data.warning);
-      }
-      
-      // Update local credits count
-      setCredits(prev => ({
-        ...prev,
-        games_remaining: response.data.games_remaining,
-        low_credits_warning: response.data.games_remaining <= 5,
-        no_credits: response.data.games_remaining <= 0
-      }));
-      
-      navigate('/lobby');
-    } catch (error) {
-      toast.error('Error al iniciar partida');
+    // Show warning if low on credits
+    if (credits?.games_remaining <= 5) {
+      toast.warning(`¡Te quedan solo ${credits.games_remaining} partidas!`);
     }
+    
+    // Navigate to lobby - credit will be deducted when match actually starts
+    navigate('/lobby');
   };
 
   const handleLogout = () => {
