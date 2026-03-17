@@ -81,10 +81,124 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
   );
 }
 
-function App() {
+// Custom hook for WebSocket notifications
+function useNotificationSocket(token, user, onChallengeReceived, onChallengeAccepted, onChallengeRejected) {
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  
+  useEffect(() => {
+    if (!token || !user?.id) return;
+    
+    const connectWebSocket = () => {
+      try {
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+        const wsUrl = backendUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+        const ws = new WebSocket(`${wsUrl}/ws/notify/${user.id}?token=${token}`);
+        
+        ws.onopen = () => {
+          console.log('🔔 Notification WebSocket connected');
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📬 WebSocket message:', data.type);
+            
+            if (data.type === 'challenge_received') {
+              onChallengeReceived(data);
+            } else if (data.type === 'challenge_accepted') {
+              onChallengeAccepted(data);
+            } else if (data.type === 'challenge_rejected') {
+              onChallengeRejected(data);
+            }
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+          }
+        };
+        
+        ws.onclose = () => {
+          console.log('🔔 Notification WebSocket disconnected, reconnecting in 3s...');
+          reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+        
+        wsRef.current = ws;
+      } catch (e) {
+        console.error('Failed to connect WebSocket:', e);
+      }
+    };
+    
+    connectWebSocket();
+    
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [token, user?.id, onChallengeReceived, onChallengeAccepted, onChallengeRejected]);
+}
+
+function AppContent() {
+  const navigate = useNavigate();
   const { token, user } = useAuthStore();
   const [pendingChallenge, setPendingChallenge] = useState(null);
+  const pendingChallengeRef = useRef(null);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    pendingChallengeRef.current = pendingChallenge;
+  }, [pendingChallenge]);
+  
+  // Play notification sound
+  const playNotificationSound = useCallback(() => {
+    try {
+      const audio = new Audio('data:audio/wav;base64,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');
+      audio.play().catch(() => {});
+    } catch (e) {}
+  }, []);
+  
+  // WebSocket handlers
+  const handleChallengeReceived = useCallback((data) => {
+    const match = data.match;
+    if (match && (!pendingChallengeRef.current || pendingChallengeRef.current.id !== match.id)) {
+      setPendingChallenge(match);
+      playNotificationSound();
+      toast.info(`¡${data.challenger?.display_name || 'Alguien'} te ha retado!`, {
+        duration: 5000,
+        icon: <Swords className="w-5 h-5 text-[hsl(25,100%,50%)]" />
+      });
+    }
+  }, [playNotificationSound]);
+  
+  const handleChallengeAccepted = useCallback((data) => {
+    toast.success(`¡Tu desafío fue aceptado! Iniciando partida...`, {
+      duration: 3000,
+      icon: <Swords className="w-5 h-5 text-green-500" />
+    });
+    // Navigate to the match
+    if (data.match_id) {
+      setTimeout(() => {
+        navigate(`/match/${data.match_id}`);
+      }, 1000);
+    }
+  }, [navigate]);
+  
+  const handleChallengeRejected = useCallback((data) => {
+    toast.error(`Tu desafío fue rechazado.`, {
+      duration: 3000
+    });
+  }, []);
+  
+  // Connect to WebSocket for real-time notifications
+  useNotificationSocket(token, user, handleChallengeReceived, handleChallengeAccepted, handleChallengeRejected);
 
+  // Also poll for challenges as backup (every 3 seconds)
   useEffect(() => {
     if (!token) return;
 
@@ -94,30 +208,28 @@ function App() {
         if (response.data.matches && response.data.matches.length > 0) {
           const latestChallenge = response.data.matches[0];
           
-          if (!pendingChallenge || pendingChallenge.id !== latestChallenge.id) {
+          if (!pendingChallengeRef.current || pendingChallengeRef.current.id !== latestChallenge.id) {
             setPendingChallenge(latestChallenge);
-            
-            // Play notification sound
-            try {
-              const audio = new Audio('data:audio/wav;base64,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');
-              audio.play().catch(() => {});
-            } catch (e) {}
+            playNotificationSound();
           }
         } else {
           // No pending challenges
-          setPendingChallenge(null);
+          if (pendingChallengeRef.current) {
+            setPendingChallenge(null);
+          }
         }
       } catch (error) {
         // Silently fail
       }
     };
 
+    // Initial check
     checkChallenges();
-    // Check more frequently for better responsiveness
-    const interval = setInterval(checkChallenges, 2000);
+    // Poll every 3 seconds as backup
+    const interval = setInterval(checkChallenges, 3000);
     
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, playNotificationSound]);
 
   const handleAcceptChallenge = async () => {
     if (!pendingChallenge) return;
