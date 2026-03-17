@@ -314,24 +314,24 @@ export default function MatchPage() {
           >
             <div className="flex items-center gap-3 mb-4">
               <AlertCircle className="w-6 h-6 text-[hsl(25,100%,50%)]" />
-              <h3 className="text-xl font-bold text-white font-brand">Request Hint?</h3>
+              <h3 className="text-xl font-bold text-white font-brand">¿Pedir Pista?</h3>
             </div>
             <p className="text-muted-foreground mb-6">
-              Requesting a hint will cost you <strong className="text-[hsl(25,100%,50%)]">-1 point</strong>. Your opponent will be notified.
+              Pedir una pista te costará <strong className="text-[hsl(25,100%,50%)]">-1 punto</strong>. Tu oponente será notificado.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowHintDialog(false)}
                 className="flex-1 btn-secondary-glass py-3"
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 onClick={confirmHint}
                 className="flex-1 btn-primary py-3"
                 data-testid="confirm-hint-button"
               >
-                Confirm
+                Confirmar
               </button>
             </div>
           </motion.div>
