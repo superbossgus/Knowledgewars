@@ -157,21 +157,87 @@ export default function LobbyPage() {
           className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6 mb-6"
           style={{ boxShadow: '0 0 20px hsl(220 100% 50% / 0.1)' }}
         >
-          <label className="block text-sm font-bold mb-3 text-white">{t('lobby.select_topic')}</label>
-          <select
-            value={selectedTopic}
-            onChange={(e) => setSelectedTopic(e.target.value)}
-            className="w-full px-4 py-3 bg-background/80 border-2 border-[hsl(220,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(220,100%,50%)] focus:border-[hsl(220,100%,50%)] focus:outline-none text-white font-medium transition-all"
-          >
-            <option value="General Knowledge">{translateTopic('General Knowledge')}</option>
-            <option value="Sports">{translateTopic('Sports')}</option>
-            <option value="History">{translateTopic('History')}</option>
-            <option value="Science">{translateTopic('Science')}</option>
-            <option value="Technology">{translateTopic('Technology')}</option>
-            <option value="Movies/TV">{translateTopic('Movies/TV')}</option>
-            <option value="Music">{translateTopic('Music')}</option>
-            <option value="Gaming">{translateTopic('Gaming')}</option>
-          </select>
+          <label className="block text-sm font-bold mb-4 text-white">{t('lobby.select_topic')}</label>
+          
+          {/* Topic Mode Toggle */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => setTopicMode('list')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${
+                topicMode === 'list' 
+                  ? 'bg-[hsl(220,100%,50%)] text-white' 
+                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              <List className="w-4 h-4" />
+              {t('lobby.from_list')}
+            </button>
+            <button
+              onClick={() => setTopicMode('custom')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${
+                topicMode === 'custom' 
+                  ? 'bg-[hsl(25,100%,50%)] text-white' 
+                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              {t('lobby.custom_topic')}
+            </button>
+          </div>
+          
+          {/* Topic Input based on mode */}
+          {topicMode === 'list' ? (
+            <select
+              value={selectedTopic}
+              onChange={(e) => setSelectedTopic(e.target.value)}
+              className="w-full px-4 py-3 bg-background/80 border-2 border-[hsl(220,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(220,100%,50%)] focus:border-[hsl(220,100%,50%)] focus:outline-none text-white font-medium transition-all"
+            >
+              {PREDEFINED_TOPICS.map(topic => (
+                <option key={topic} value={topic}>{translateTopic(topic)}</option>
+              ))}
+            </select>
+          ) : (
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <input
+                type="text"
+                value={customTopic}
+                onChange={(e) => setCustomTopic(e.target.value)}
+                placeholder={t('lobby.custom_placeholder')}
+                maxLength={100}
+                className="w-full pl-12 pr-4 py-3 bg-background/80 border-2 border-[hsl(25,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(25,100%,50%)] focus:border-[hsl(25,100%,50%)] focus:outline-none text-white font-medium transition-all placeholder:text-muted-foreground"
+              />
+              {customTopic && (
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  {customTopic.length}/100
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Topic examples for custom mode */}
+          {topicMode === 'custom' && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="text-xs text-muted-foreground">{t('lobby.examples')}:</span>
+              {['Michael Jackson', 'Harry Potter', 'Copa Mundial', 'Marvel', 'Taylor Swift'].map(example => (
+                <button
+                  key={example}
+                  onClick={() => setCustomTopic(example)}
+                  className="text-xs px-2 py-1 rounded-lg bg-muted/30 hover:bg-[hsl(25,100%,50%,0.2)] text-[hsl(25,100%,70%)] transition-all"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* Show selected topic */}
+          <div className="mt-4 p-3 rounded-xl bg-muted/20 border border-[hsl(220,100%,50%,0.2)]">
+            <span className="text-sm text-muted-foreground">{t('lobby.playing_topic')}: </span>
+            <span className="text-sm font-bold text-white">
+              {topicMode === 'custom' && customTopic ? customTopic : translateTopic(selectedTopic)}
+            </span>
+          </div>
         </motion.div>
 
         {/* Random Match Button */}
