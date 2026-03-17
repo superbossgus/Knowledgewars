@@ -122,7 +122,7 @@ export default function HomePage() {
                 <h2 className="text-2xl font-bold font-brand text-white">{t('home.play_random')}</h2>
               </div>
               <p className="text-muted-foreground mb-6 text-lg">
-                Challenge a random opponent and prove your knowledge!
+                {t('home.play_random_desc')}
               </p>
               <button
                 onClick={handlePlayRandom}
