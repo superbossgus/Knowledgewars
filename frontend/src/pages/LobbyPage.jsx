@@ -6,7 +6,7 @@ import { useAuthStore } from '../store/store';
 import { EloBadge } from '../components/custom/EloBadge';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Swords, Users, Shield, Zap, Search, Sparkles, List } from 'lucide-react';
+import { ArrowLeft, Swords, Users, Shield, Zap, Search, Sparkles, List, Filter, UserSearch } from 'lucide-react';
 
 // Predefined topics list
 const PREDEFINED_TOPICS = [
