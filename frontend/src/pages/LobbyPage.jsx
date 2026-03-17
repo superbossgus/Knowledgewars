@@ -376,14 +376,16 @@ export default function LobbyPage() {
               {(searchResults !== null ? searchResults : onlineUsers).map((player) => (
                 <div
                   key={player.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.1)] border border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all"
+                  className="flex items-center justify-between p-4 rounded-xl bg-muted/30 hover:bg-[hsl(220,100%,50%,0.1)] border-2 border-transparent hover:border-[hsl(220,100%,50%,0.3)] transition-all"
                   data-testid="player-row"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className={`fi fi-${player.country_code?.toLowerCase()} h-6 w-8 rounded shadow-lg`}></span>
+                  <div className="flex items-center gap-4">
+                    <span className={`fi fi-${player.country_code?.toLowerCase()} h-8 w-10 rounded shadow-lg`}></span>
                     <div>
-                      <div className="font-bold text-white text-lg">{player.display_name}</div>
-                      <div className="text-sm text-[hsl(45,92%,48%)] font-semibold">
+                      <div className="font-extrabold text-white text-xl md:text-2xl" style={{ textShadow: '0 0 10px rgba(255,255,255,0.2)' }}>
+                        {player.display_name}
+                      </div>
+                      <div className="text-base text-[hsl(45,92%,55%)] font-bold">
                         {player.rank_name || player.league?.toUpperCase()} • {player.elo_rating} ELO
                       </div>
                     </div>
