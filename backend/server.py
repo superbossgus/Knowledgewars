@@ -1157,7 +1157,7 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
 
 @app.post("/api/matches/{match_id}/accept")
 async def accept_match(match_id: str, current_user: dict = Depends(get_current_user)):
-    """Accept a match challenge"""
+    """Accept a match challenge - THIS is when credits are deducted"""
     match = matches_col.find_one({"_id": ObjectId(match_id)})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -1168,27 +1168,62 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
     if match["status"] != "pending":
         raise HTTPException(status_code=400, detail="Match already started or finished")
     
-    # Check duel limit for accepter
-    if not check_duel_limit(current_user["id"]):
-        raise HTTPException(status_code=403, detail="Duel limit reached")
+    # Check if challenge expired
+    expires_at = match.get("expires_at")
+    if expires_at:
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at < datetime.utcnow():
+            matches_col.update_one(
+                {"_id": ObjectId(match_id)},
+                {"$set": {"status": "expired"}}
+            )
+            raise HTTPException(status_code=400, detail="El desafío ha expirado")
+    
+    # Check both players have credits
+    player_a = users_col.find_one({"_id": match["player_a_id"]})
+    player_b = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    
+    if player_a.get("games_remaining", 0) <= 0:
+        raise HTTPException(status_code=400, detail="El retador ya no tiene partidas disponibles")
+    
+    if player_b.get("games_remaining", 0) <= 0:
+        raise HTTPException(status_code=403, detail="No tienes partidas disponibles")
+    
+    # NOW deduct credits from both players
+    users_col.update_one(
+        {"_id": match["player_a_id"]},
+        {"$inc": {"games_remaining": -1}}
+    )
+    users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$inc": {"games_remaining": -1}}
+    )
     
     # Update match status
     matches_col.update_one(
         {"_id": ObjectId(match_id)},
-        {"$set": {"status": "active", "started_at": datetime.utcnow()}}
+        {"$set": {
+            "status": "active", 
+            "started_at": datetime.utcnow(),
+            "credits_deducted": True
+        }}
     )
     
-    # Increment duel counters for both players
-    increment_duel_counter(str(match["player_a_id"]))
-    increment_duel_counter(str(match["player_b_id"]))
+    # Notify challenger that match was accepted
+    await manager.send_message(str(match["player_a_id"]), {
+        "type": "challenge_accepted",
+        "match_id": match_id,
+        "message": f"{current_user['display_name']} aceptó tu desafío!"
+    })
     
-    # Notify both players
+    # Notify both players to start the match
     await manager.broadcast_to_match(match_id, {
         "type": "match_started",
         "match_id": match_id
     })
     
-    return {"success": True, "match_id": match_id}
+    return {"success": True, "match_id": match_id, "message": "¡Partida iniciada!"}
 
 
 @app.post("/api/matches/{match_id}/reject")
