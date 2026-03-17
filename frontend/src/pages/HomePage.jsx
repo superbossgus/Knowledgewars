@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Swords, Trophy, Flame, LogOut, Shield, Zap, Coins, AlertTriangle, ShoppingCart } from 'lucide-react';
 
 export default function HomePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   
@@ -24,6 +24,13 @@ export default function HomePage() {
     // If translation exists and is different from key, use it; otherwise return original
     return translated !== topicKey ? translated : topic;
   };
+
+  // Change language based on user preference
+  useEffect(() => {
+    if (user?.language && i18n.language !== user.language) {
+      i18n.changeLanguage(user.language);
+    }
+  }, [user?.language, i18n]);
 
   useEffect(() => {
     loadData();
