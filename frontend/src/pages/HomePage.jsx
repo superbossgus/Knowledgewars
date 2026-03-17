@@ -250,7 +250,7 @@ export default function HomePage() {
                 className="p-5 rounded-xl bg-muted/30 hover:bg-[hsl(25,100%,50%,0.15)] border border-transparent hover:border-[hsl(25,100%,50%,0.3)] transition-all text-center"
               >
                 <Coins className="w-8 h-8 mx-auto mb-2 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
-                <span className="text-sm font-bold text-white">Tienda</span>
+                <span className="text-sm font-bold text-white">{t('home.store')}</span>
               </button>
             </div>
           </motion.div>
