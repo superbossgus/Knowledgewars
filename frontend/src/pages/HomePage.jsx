@@ -184,14 +184,14 @@ export default function HomePage() {
           >
             <div className="flex items-center gap-2 mb-3">
               <ShoppingCart className="w-6 h-6 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
-              <h3 className="font-bold text-white text-lg">Tienda</h3>
+              <h3 className="font-bold text-white text-lg">{t('home.store')}</h3>
             </div>
-            <p className="text-muted-foreground text-sm mb-4">50 partidas por $99 MXN</p>
+            <p className="text-muted-foreground text-sm mb-4">{t('home.store_desc')}</p>
             <button
               onClick={() => navigate('/store')}
               className="w-full btn-primary py-3"
             >
-              Ir a la Tienda
+              {t('home.go_to_store')}
             </button>
           </motion.div>
 
