@@ -17,6 +17,14 @@ export default function HomePage() {
   const [credits, setCredits] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to translate topic names
+  const translateTopic = (topic) => {
+    const topicKey = `topics.${topic}`;
+    const translated = t(topicKey);
+    // If translation exists and is different from key, use it; otherwise return original
+    return translated !== topicKey ? translated : topic;
+  };
+
   useEffect(() => {
     loadData();
   }, []);
