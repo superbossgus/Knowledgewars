@@ -283,14 +283,14 @@ export default function MatchPage() {
           <div className="flex items-center justify-between p-4 rounded-xl bg-card/60 border-2 border-[hsl(45,92%,48%,0.3)] backdrop-blur-xl" style={{ boxShadow: '0 0 15px hsl(45 92% 48% / 0.1)' }}>
             <div className="flex items-center gap-2 text-sm text-[hsl(45,92%,48%)]">
               <Lightbulb className="w-5 h-5" style={{ filter: 'drop-shadow(0 0 4px hsl(45 92% 48%))' }} />
-              <span className="font-bold">Need help? Request a hint</span>
+              <span className="font-bold">¿Necesitas ayuda? Pide una pista</span>
             </div>
             <button
               onClick={handleRequestHint}
               className="btn-secondary-glass px-4 py-2 text-sm"
               data-testid="request-hint-button"
             >
-              Hint (-1 point)
+              Pista (-1 punto)
             </button>
           </div>
         )}
