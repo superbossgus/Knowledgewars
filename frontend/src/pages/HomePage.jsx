@@ -153,7 +153,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Coins className="w-6 h-6 text-[hsl(45,92%,48%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(45 92% 48%))' }} />
-                <h3 className="font-bold text-white text-lg">Partidas</h3>
+                <h3 className="font-bold text-white text-lg">{t('home.games_remaining')}</h3>
               </div>
               {credits?.low_credits_warning && (
                 <AlertTriangle className={`w-5 h-5 ${credits?.no_credits ? 'text-[hsl(0,100%,60%)]' : 'text-[hsl(45,92%,48%)]'}`} />
