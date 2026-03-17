@@ -340,7 +340,7 @@ export default function LobbyPage() {
               )}
             </div>
             {searchUsername && searchResults !== null && (
-              <div className="mt-2 text-xs text-muted-foreground">
+              <div className="mt-2 text-sm text-white/70 font-medium">
                 {searchResults.length > 0 
                   ? t('lobby.search_found', { count: searchResults.length })
                   : t('lobby.search_not_found')
