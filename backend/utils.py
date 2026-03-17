@@ -141,6 +141,7 @@ Rules:
 - 6 options labeled A,B,C,D,E,F.
 - Exactly one correct option.
 - Provide fields: id, question, options (object with A,B,C,D,E,F keys), correct_letter, hint, explanation_short.
+- IMPORTANT: ALL text fields (question, options, hint, explanation_short) MUST be in {lang_full}. Do NOT use English for hints if the language is {lang_full}.
 - Questions must be evergreen and not rely on very recent news.
 
 Return ONLY valid JSON (no markdown):
