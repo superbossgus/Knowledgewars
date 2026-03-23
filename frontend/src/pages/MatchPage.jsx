@@ -18,15 +18,17 @@ export default function MatchPage() {
   
   const [match, setMatch] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(10);
+  const [timeRemaining, setTimeRemaining] = useState(15);
   const [myScore, setMyScore] = useState(0);
   const [opponentScore, setOpponentScore] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [answerState, setAnswerState] = useState('idle');
+  const [answerState, setAnswerState] = useState('idle'); // idle, correct, wrong
   const [isLocked, setIsLocked] = useState(false);
+  const [canAnswer, setCanAnswer] = useState(true); // Can I answer?
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState('');
   const [showHintDialog, setShowHintDialog] = useState(false);
+  const [opponentAnsweredWrong, setOpponentAnsweredWrong] = useState(false);
   
   const wsRef = useRef(null);
   const timerRef = useRef(null);
@@ -52,7 +54,7 @@ export default function MatchPage() {
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
     } catch (error) {
-      toast.error('Failed to load match');
+      toast.error('Error al cargar la partida');
       navigate('/home');
     }
   };
@@ -96,26 +98,59 @@ export default function MatchPage() {
       
       case 'answer_result':
         if (data.user_id === user.id) {
+          // My answer result
           if (data.result === 'correct') {
             setAnswerState('correct');
             setMyScore((prev) => prev + 2);
-            toast.success(t('match.correct'));
+            toast.success('¡Correcto! +2 puntos');
             setTimeout(() => {
               nextQuestion();
             }, 2000);
           } else if (data.result === 'incorrect') {
             setAnswerState('wrong');
-            setIsLocked(true);
-            toast.error(t('match.incorrect'));
+            setCanAnswer(false);
+            toast.error('¡Incorrecto! Tu oponente puede responder');
           }
         } else {
+          // Opponent's answer result
           if (data.result === 'correct') {
             setOpponentScore((prev) => prev + 2);
+            toast.info('Tu oponente respondió correctamente');
             setTimeout(() => {
               nextQuestion();
             }, 2000);
+          } else if (data.result === 'incorrect') {
+            // Opponent answered wrong - I can try now!
+            setOpponentAnsweredWrong(true);
+            setCanAnswer(true);
+            setIsLocked(false);
+            toast.warning('¡Tu oponente se equivocó! Es tu turno de responder', {
+              duration: 3000,
+              icon: '🎯'
+            });
           }
         }
+        break;
+      
+      case 'opponent_wrong':
+        // Opponent answered wrong - my turn
+        setOpponentAnsweredWrong(true);
+        setCanAnswer(true);
+        setIsLocked(false);
+        toast.warning('¡Tu oponente se equivocó! Es tu turno', {
+          duration: 3000,
+          icon: '🎯'
+        });
+        break;
+      
+      case 'time_up':
+        // Time's up - no one got it right
+        toast.error('⏰ ¡Tiempo agotado! Nadie acertó. 0 puntos para ambos.', {
+          duration: 3000
+        });
+        setTimeout(() => {
+          nextQuestion();
+        }, 2000);
         break;
       
       case 'hint_result':
@@ -128,7 +163,7 @@ export default function MatchPage() {
         break;
       
       case 'opponent_hint':
-        toast(t('match.opponent_hint'), { icon: <Lightbulb className="w-4 h-4" /> });
+        toast('Tu oponente pidió una pista', { icon: <Lightbulb className="w-4 h-4" /> });
         break;
       
       case 'match_finished':
@@ -141,14 +176,20 @@ export default function MatchPage() {
   };
 
   const startTimer = () => {
-    setTimeRemaining(10);
+    setTimeRemaining(15); // 15 seconds per question
     if (timerRef.current) clearInterval(timerRef.current);
     
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          nextQuestion();
+          // Send timeout event to server
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: 'time_up',
+              question_index: currentQuestion
+            }));
+          }
           return 0;
         }
         return prev - 1;
@@ -162,6 +203,8 @@ export default function MatchPage() {
       setSelectedAnswer(null);
       setAnswerState('idle');
       setIsLocked(false);
+      setCanAnswer(true);
+      setOpponentAnsweredWrong(false);
       setHintUsed(false);
       setHintText('');
       startTimer();
@@ -169,7 +212,7 @@ export default function MatchPage() {
   };
 
   const handleAnswerSelect = (letter) => {
-    if (isLocked || selectedAnswer) return;
+    if (isLocked || selectedAnswer || !canAnswer) return;
     
     setSelectedAnswer(letter);
     setIsLocked(true);
