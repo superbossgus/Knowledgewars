@@ -125,6 +125,53 @@ export default function AdminPage() {
     }
   };
 
+  const handleResetAllElos = async () => {
+    if (!confirm('⚠️ ¿SEGURO que quieres resetear TODOS los usuarios a BRONCE III (500 ELO)? Esta acción no se puede deshacer.')) return;
+    if (!confirm('⚠️ CONFIRMAR: Esto afectará a TODOS los jugadores. ¿Continuar?')) return;
+    
+    setLoading(true);
+    try {
+      const response = await api.post('/api/admin/reset-all-elos', {}, {
+        headers: { Authorization: `Bearer ${adminSecret || localStorage.getItem('admin_secret')}` }
+      });
+      toast.success(response.data.message);
+      // Reload stats
+      const statsResponse = await api.get('/api/admin/stats', {
+        headers: { Authorization: `Bearer ${adminSecret || localStorage.getItem('admin_secret')}` }
+      });
+      setStats(statsResponse.data);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Error al resetear ELOs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGiveGamesToAll = async () => {
+    const games = prompt('¿Cuántas partidas gratis quieres dar a TODOS los usuarios? (1-100)');
+    if (!games) return;
+    
+    const gamesNum = parseInt(games);
+    if (isNaN(gamesNum) || gamesNum < 1 || gamesNum > 100) {
+      toast.error('Ingresa un número válido entre 1 y 100');
+      return;
+    }
+    
+    if (!confirm(`¿Dar ${gamesNum} partidas gratis a TODOS los usuarios?`)) return;
+    
+    setLoading(true);
+    try {
+      const response = await api.post(`/api/admin/give-games?games=${gamesNum}`, {}, {
+        headers: { Authorization: `Bearer ${adminSecret || localStorage.getItem('admin_secret')}` }
+      });
+      toast.success(response.data.message);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Error al dar partidas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('admin_secret');
     setAuthenticated(false);
