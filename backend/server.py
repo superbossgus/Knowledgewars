@@ -1509,6 +1509,9 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
             
             elif data["type"] == "request_hint":
                 await handle_hint_request(match_id, user_id, data)
+            
+            elif data["type"] == "time_up":
+                await handle_time_up(match_id, user_id, data)
     
     except WebSocketDisconnect:
         manager.disconnect(user_id)
