@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-03-23T03:27:45.013510",
+  "total_tests": 3,
+  "passed": 2,
+  "failed": 1,
+  "success_rate": 66.66666666666666,
+  "results": [
+    {
+      "test": "Login test1@knowledgewars.app",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Login test2@knowledgewars.app",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Create match challenge",
+      "passed": false,
+      "details": "Request timeout"
+    }
+  ]
+}

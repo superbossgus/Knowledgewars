@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-03-01T22:18:34.378766",
-  "total_tests": 12,
-  "passed": 10,
+  "timestamp": "2026-03-23T03:26:23.954602",
+  "total_tests": 13,
+  "passed": 11,
   "failed": 2,
-  "success_rate": 83.33333333333334,
+  "success_rate": 84.61538461538461,
   "results": [
     {
       "test": "GET /api/health",
@@ -57,13 +57,18 @@
     },
     {
       "test": "POST /api/payments/checkout (subscription)",
-      "passed": false,
-      "details": "Request timeout"
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "POST /api/payments/checkout (consumable)",
+      "passed": true,
+      "details": ""
     },
     {
       "test": "GET /api/admin/stats",
-      "passed": true,
-      "details": ""
+      "passed": false,
+      "details": "Expected 200, got 403 - Invalid admin credentials"
     }
   ]
 }

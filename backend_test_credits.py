@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 
 class CreditBugTester:
-    def __init__(self, base_url="https://neon-trivia-2.preview.emergentagent.com"):
+    def __init__(self, base_url="https://knowledge-wars-pvp.preview.emergentagent.com"):
         self.base_url = base_url
         self.test1_token = None
         self.test2_token = None

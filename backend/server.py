@@ -1564,7 +1564,15 @@ async def websocket_notifications(websocket: WebSocket, user_id: str, token: str
 
 
 async def handle_answer_submission(match_id: str, user_id: str, data: dict):
-    """Handle answer submission in real-time with turn-based wrong answers"""
+    """Handle answer submission with simultaneous answering (race-to-correct)
+    
+    Rules:
+    - Both players can answer at any time (simultaneous)
+    - First correct answer wins +2 points for that question
+    - If a player answers incorrectly, they are locked out for this question
+    - The other player can still answer (if they haven't already)
+    - If time expires with no correct answer, 0 points for both
+    """
     match = matches_col.find_one({"_id": ObjectId(match_id)})
     if not match or match["status"] != "active":
         return
@@ -1579,15 +1587,32 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     
     correct_answer = match["questions"][question_index]["correct_letter"]
     
-    # Check if already answered correctly by someone
-    events = list(match_events_col.find({
+    # Check if this player already submitted an answer for this question
+    user_previous_answer = match_events_col.find_one({
+        "match_id": ObjectId(match_id),
+        "user_id": ObjectId(user_id),
+        "question_index": question_index,
+        "event_type": {"$in": ["correct_answer", "incorrect_answer"]}
+    })
+    
+    if user_previous_answer:
+        # Player already answered - prevent spam
+        await manager.send_message(user_id, {
+            "type": "answer_result",
+            "result": "already_submitted",
+            "score_delta": 0
+        })
+        return
+    
+    # Check if someone already answered correctly
+    correct_answer_event = match_events_col.find_one({
         "match_id": ObjectId(match_id),
         "question_index": question_index,
         "event_type": "correct_answer"
-    }).limit(1))
+    })
     
-    if events:
-        # Already answered correctly
+    if correct_answer_event:
+        # Someone already won this question
         await manager.send_message(user_id, {
             "type": "answer_result",
             "result": "already_answered",
@@ -1601,14 +1626,14 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     
     # Check if correct
     if answer == correct_answer:
-        # Correct! Award +2 points
+        # CORRECT! First correct answer wins +2 points
         score_field = "score_a" if is_player_a else "score_b"
         matches_col.update_one(
             {"_id": ObjectId(match_id)},
             {"$inc": {score_field: 2}}
         )
         
-        # Log event
+        # Log correct answer event
         match_events_col.insert_one({
             "match_id": ObjectId(match_id),
             "user_id": ObjectId(user_id),
@@ -1632,7 +1657,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             await finish_match(match_id)
     
     else:
-        # Incorrect - log event
+        # INCORRECT - Lock this player out for this question
         match_events_col.insert_one({
             "match_id": ObjectId(match_id),
             "user_id": ObjectId(user_id),
@@ -1642,7 +1667,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             "timestamp": timestamp
         })
         
-        # Notify the user who answered wrong
+        # Notify the user who answered wrong (they are now locked)
         await manager.send_message(user_id, {
             "type": "answer_result",
             "user_id": user_id,
@@ -1650,13 +1675,20 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             "score_delta": 0
         })
         
-        # Notify opponent that they can try (the other player answered wrong)
-        await manager.send_message(opponent_id, {
-            "type": "answer_result",
-            "user_id": user_id,
-            "result": "incorrect",
-            "score_delta": 0
+        # Check if opponent has already answered wrong too
+        opponent_wrong = match_events_col.find_one({
+            "match_id": ObjectId(match_id),
+            "user_id": ObjectId(opponent_id),
+            "question_index": question_index,
+            "event_type": "incorrect_answer"
         })
+        
+        # Notify opponent (they can still try if they haven't answered yet)
+        if not opponent_wrong:
+            await manager.send_message(opponent_id, {
+                "type": "opponent_wrong",
+                "message": "Tu rival se equivocó. ¡Sigue intentando!"
+            })
 
 
 async def handle_time_up(match_id: str, user_id: str, data: dict):

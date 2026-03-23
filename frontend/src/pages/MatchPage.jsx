@@ -23,8 +23,7 @@ export default function MatchPage() {
   const [opponentScore, setOpponentScore] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerState, setAnswerState] = useState('idle'); // idle, correct, wrong
-  const [isLocked, setIsLocked] = useState(false);
-  const [canAnswer, setCanAnswer] = useState(true); // Can I answer?
+  const [isLocked, setIsLocked] = useState(false); // Am I locked out from answering?
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState('');
   const [showHintDialog, setShowHintDialog] = useState(false);
@@ -102,45 +101,41 @@ export default function MatchPage() {
           if (data.result === 'correct') {
             setAnswerState('correct');
             setMyScore((prev) => prev + 2);
-            toast.success('¡Correcto! +2 puntos');
+            toast.success('¡Correcto! +2 puntos', { icon: '✅' });
             setTimeout(() => {
               nextQuestion();
             }, 2000);
           } else if (data.result === 'incorrect') {
             setAnswerState('wrong');
-            setCanAnswer(false);
-            toast.error('¡Incorrecto! Tu oponente puede responder');
+            setIsLocked(true); // I'm locked out now
+            toast.error('¡Incorrecto! Estás bloqueado para esta pregunta', { icon: '❌' });
+          } else if (data.result === 'already_submitted') {
+            toast.warning('Ya respondiste esta pregunta');
+          } else if (data.result === 'already_answered') {
+            toast.info('Alguien ya respondió correctamente');
           }
         } else {
           // Opponent's answer result
           if (data.result === 'correct') {
             setOpponentScore((prev) => prev + 2);
-            toast.info('Tu oponente respondió correctamente');
+            setIsLocked(true); // Lock me too since question is over
+            toast.info('Tu oponente respondió correctamente', { icon: '⚡' });
             setTimeout(() => {
               nextQuestion();
             }, 2000);
-          } else if (data.result === 'incorrect') {
-            // Opponent answered wrong - I can try now!
-            setOpponentAnsweredWrong(true);
-            setCanAnswer(true);
-            setIsLocked(false);
-            toast.warning('¡Tu oponente se equivocó! Es tu turno de responder', {
-              duration: 3000,
-              icon: '🎯'
-            });
           }
         }
         break;
       
       case 'opponent_wrong':
-        // Opponent answered wrong - my turn
+        // Opponent answered wrong - I can still try if I haven't answered yet
         setOpponentAnsweredWrong(true);
-        setCanAnswer(true);
-        setIsLocked(false);
-        toast.warning('¡Tu oponente se equivocó! Es tu turno', {
-          duration: 3000,
-          icon: '🎯'
-        });
+        if (!isLocked) {
+          toast.info('Tu rival se equivocó. ¡Sigue intentando!', {
+            duration: 3000,
+            icon: '🎯'
+          });
+        }
         break;
       
       case 'time_up':
@@ -202,8 +197,7 @@ export default function MatchPage() {
       setCurrentQuestion((prev) => prev + 1);
       setSelectedAnswer(null);
       setAnswerState('idle');
-      setIsLocked(false);
-      setCanAnswer(true);
+      setIsLocked(false); // Reset: both players can answer again
       setOpponentAnsweredWrong(false);
       setHintUsed(false);
       setHintText('');
@@ -212,10 +206,10 @@ export default function MatchPage() {
   };
 
   const handleAnswerSelect = (letter) => {
-    if (isLocked || selectedAnswer || !canAnswer) return;
+    // Can only answer if not locked and haven't selected yet
+    if (isLocked || selectedAnswer) return;
     
     setSelectedAnswer(letter);
-    setIsLocked(true);
     
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({

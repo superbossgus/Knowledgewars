@@ -171,7 +171,7 @@
     "favicon": {
       "status": "VERIFIED",
       "file": "/app/frontend/public/favicon.svg",
-      "url": "https://neon-trivia-2.preview.emergentagent.com/favicon.svg",
+      "url": "https://knowledge-wars-pvp.preview.emergentagent.com/favicon.svg",
       "format": "SVG with Knowledge Wars branding (K letter, shield, crossed swords)"
     }
   },
@@ -231,7 +231,7 @@
   },
   
   "additional_notes": {
-    "test_environment": "Production URL: https://neon-trivia-2.preview.emergentagent.com",
+    "test_environment": "Production URL: https://knowledge-wars-pvp.preview.emergentagent.com",
     "test_accounts": "test1@knowledgewars.app and test2@knowledgewars.app (both with 20 initial games)",
     "llm_integration": "Question generation working (requires 30-60s timeout for OpenAI API)",
     "websocket_ready": "WebSocket notification system fully implemented and ready for real-time notifications",

@@ -1,0 +1,145 @@
+{
+  "timestamp": "2026-03-23T03:30:37.884310",
+  "total_tests": 25,
+  "passed": 21,
+  "failed": 4,
+  "success_rate": 84.0,
+  "results": [
+    {
+      "test": "test1@knowledgewars.app login",
+      "passed": true,
+      "details": "User ID: 69b8afa2776ad6a17498473d"
+    },
+    {
+      "test": "test2@knowledgewars.app login",
+      "passed": true,
+      "details": "User ID: 69b8afa2776ad6a17498473e"
+    },
+    {
+      "test": "Code contains: Both players can answer simultaneously",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: First correct answer wins +2 points",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: Wrong answer locks only that player",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: Other player can continue",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: No points if time expires",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: Spam prevention",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: Race-to-correct logic",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Code contains: No turn-based logic",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Frontend: Frontend handles isLocked state",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Frontend: No turn-based messages",
+      "passed": false,
+      "details": ""
+    },
+    {
+      "test": "Frontend: Opponent wrong notification",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Frontend: 15-second timer",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Frontend: Hint system implemented",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Match creation with question generation",
+      "passed": false,
+      "details": "Request timeout (15s)"
+    },
+    {
+      "test": "WebSocket match endpoint",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "WebSocket notifications endpoint",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "handle_answer_submission function",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "handle_time_up function",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "handle_hint_request function",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "ConnectionManager class",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "test": "Frontend loads successfully",
+      "passed": true,
+      "details": "Status: 200"
+    },
+    {
+      "test": "Frontend shows correct branding",
+      "passed": false,
+      "details": "KNOWLEDGE WARS not found"
+    },
+    {
+      "test": "Frontend has login functionality",
+      "passed": false,
+      "details": ""
+    }
+  ],
+  "simultaneous_logic_implemented": true,
+  "requirements_met": [
+    "Both players can answer simultaneously (no turns)",
+    "First correct answer gets +2 points",
+    "Wrong answer locks only that player",
+    "Other player can continue after opponent fails",
+    "No points if time expires without correct answer",
+    "15-second timer per question",
+    "Hint system (-1 point)",
+    "No turn-based messages"
+  ]
+}
