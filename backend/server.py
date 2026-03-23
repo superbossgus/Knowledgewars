@@ -913,6 +913,50 @@ async def get_admin_stats(admin: bool = Depends(verify_admin)):
     }
 
 
+@app.post("/api/admin/reset-all-elos")
+async def reset_all_elos(admin: bool = Depends(verify_admin)):
+    """Reset all users to BRONCE III (500 ELO) - Admin only"""
+    # Get initial rank info
+    initial_elo = 500
+    initial_rank = ELOCalculator.get_rank(initial_elo)
+    
+    # Update all users
+    result = users_col.update_many(
+        {},  # All users
+        {
+            "$set": {
+                "elo_rating": initial_elo,
+                "league": initial_rank['tier'],
+                "rank_name": initial_rank['name']
+            }
+        }
+    )
+    
+    return {
+        "success": True,
+        "message": f"Se resetearon {result.modified_count} usuarios a BRONCE III (500 ELO)",
+        "users_reset": result.modified_count
+    }
+
+
+@app.post("/api/admin/give-games")
+async def give_games_to_all(games: int = 10, admin: bool = Depends(verify_admin)):
+    """Give free games to all users - Admin only"""
+    if games < 1 or games > 100:
+        raise HTTPException(status_code=400, detail="Cantidad debe ser entre 1 y 100")
+    
+    result = users_col.update_many(
+        {},
+        {"$inc": {"games_remaining": games}}
+    )
+    
+    return {
+        "success": True,
+        "message": f"Se agregaron {games} partidas a {result.modified_count} usuarios",
+        "users_updated": result.modified_count
+    }
+
+
 # ============================================================================
 # USER ENDPOINTS
 # ============================================================================
