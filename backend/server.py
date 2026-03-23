@@ -1561,7 +1561,7 @@ async def websocket_notifications(websocket: WebSocket, user_id: str, token: str
 
 
 async def handle_answer_submission(match_id: str, user_id: str, data: dict):
-    """Handle answer submission in real-time"""
+    """Handle answer submission in real-time with turn-based wrong answers"""
     match = matches_col.find_one({"_id": ObjectId(match_id)})
     if not match or match["status"] != "active":
         return
@@ -1584,7 +1584,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     }).limit(1))
     
     if events:
-        # Already answered
+        # Already answered correctly
         await manager.send_message(user_id, {
             "type": "answer_result",
             "result": "already_answered",
@@ -1594,6 +1594,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     
     # Determine if user is player A or B
     is_player_a = str(match["player_a_id"]) == user_id
+    opponent_id = str(match["player_b_id"]) if is_player_a else str(match["player_a_id"])
     
     # Check if correct
     if answer == correct_answer:
@@ -1628,7 +1629,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             await finish_match(match_id)
     
     else:
-        # Incorrect
+        # Incorrect - log event
         match_events_col.insert_one({
             "match_id": ObjectId(match_id),
             "user_id": ObjectId(user_id),
@@ -1638,19 +1639,60 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             "timestamp": timestamp
         })
         
-        # Notify user
+        # Notify the user who answered wrong
         await manager.send_message(user_id, {
             "type": "answer_result",
+            "user_id": user_id,
             "result": "incorrect",
             "score_delta": 0
         })
         
-        # Notify opponent they can try
-        opponent_id = str(match["player_b_id"]) if is_player_a else str(match["player_a_id"])
+        # Notify opponent that they can try (the other player answered wrong)
         await manager.send_message(opponent_id, {
-            "type": "opponent_locked",
-            "question_index": question_index
+            "type": "answer_result",
+            "user_id": user_id,
+            "result": "incorrect",
+            "score_delta": 0
         })
+
+
+async def handle_time_up(match_id: str, user_id: str, data: dict):
+    """Handle time up event - no one answered correctly"""
+    match = matches_col.find_one({"_id": ObjectId(match_id)})
+    if not match or match["status"] != "active":
+        return
+    
+    question_index = data.get("question_index", 0)
+    
+    # Check if already answered correctly by someone
+    events = list(match_events_col.find({
+        "match_id": ObjectId(match_id),
+        "question_index": question_index,
+        "event_type": "correct_answer"
+    }).limit(1))
+    
+    if events:
+        # Already answered correctly, ignore time_up
+        return
+    
+    # Log time_up event
+    match_events_col.insert_one({
+        "match_id": ObjectId(match_id),
+        "question_index": question_index,
+        "event_type": "time_up",
+        "timestamp": datetime.utcnow()
+    })
+    
+    # Notify both players - time's up, 0 points
+    await manager.broadcast_to_match(match_id, {
+        "type": "time_up",
+        "question_index": question_index,
+        "message": "Tiempo agotado. Ningún jugador acertó. 0 puntos para ambos."
+    })
+    
+    # Check if match is finished (10 questions)
+    if question_index >= 9:
+        await finish_match(match_id)
 
 
 async def handle_hint_request(match_id: str, user_id: str, data: dict):
