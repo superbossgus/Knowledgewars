@@ -271,6 +271,49 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Admin Actions */}
+        <div className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(340,80%,50%,0.3)] rounded-2xl p-6 mb-8">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
+            <Shield className="w-6 h-6 text-[hsl(340,80%,50%)]" />
+            Acciones de Administrador
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            ⚠️ Estas acciones afectan a TODOS los usuarios. Usar con precaución.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Reset All ELOs */}
+            <div className="p-4 bg-muted/20 rounded-xl border border-[hsl(340,80%,50%,0.3)]">
+              <h3 className="font-bold text-white mb-2">🔄 Resetear Todos los ELOs</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Todos los usuarios volverán a BRONCE III (500 ELO). Útil para nueva temporada.
+              </p>
+              <button
+                onClick={handleResetAllElos}
+                disabled={loading}
+                className="w-full py-2 px-4 bg-[hsl(340,80%,50%)] hover:bg-[hsl(340,80%,45%)] text-white font-bold rounded-xl transition-all disabled:opacity-50"
+              >
+                {loading ? 'Procesando...' : 'Resetear Todos a BRONCE III'}
+              </button>
+            </div>
+            
+            {/* Give Games to All */}
+            <div className="p-4 bg-muted/20 rounded-xl border border-[hsl(140,100%,40%,0.3)]">
+              <h3 className="font-bold text-white mb-2">🎁 Dar Partidas Gratis</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Regala partidas a todos los usuarios. Ideal para promociones o eventos.
+              </p>
+              <button
+                onClick={handleGiveGamesToAll}
+                disabled={loading}
+                className="w-full py-2 px-4 bg-[hsl(140,100%,35%)] hover:bg-[hsl(140,100%,30%)] text-white font-bold rounded-xl transition-all disabled:opacity-50"
+              >
+                {loading ? 'Procesando...' : 'Dar Partidas a Todos'}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Coupons Management */}
         <div className="bg-card/60 backdrop-blur-xl border-2 border-[hsl(220,100%,50%,0.3)] rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
