@@ -1,19 +1,19 @@
 # Knowledge Wars – Plan (MVP-first, Core-Proven)
 
 ## 1) Objectives
-- Build a globally scalable trivia PvP app (web PWA first; path to native) with real-time 1v1 duels, multilanguage (es/en/pt), and **Stripe-powered monetization** for buying game credits (50 games / $99 MXN), plus coupons.
+- Build a globally scalable trivia PvP app (web PWA first; path to native) with real-time 1v1 duels, multilanguage (es/en/pt), and **Stripe-powered monetization** for buying game credits (**50 games / $99 MXN**), plus coupons.
 - Prove and harden the hardest cores:
-  - **WebSocket duel loop fairness**: server-authoritative timer and **simultaneous answering (race-to-correct)**.
-  - **Payments**: real Stripe Checkout redirect + confirmation via webhooks (no demo “confirm immediately”).
+  - **WebSocket duel loop fairness**: server-authoritative resolution and **simultaneous answering (race-to-correct)**.
+  - **Payments**: real **Stripe Checkout redirect** + **confirmation via webhooks** + **client-side polling** after return from Stripe (no demo “confirm immediately”).
 - Deliver a modern, competitive UI (mobile-first) with shadcn/ui and rock-solid UX.
 
 ## 2) Development Phases
 
 ### Phase 1: Core POC (Do not proceed until green) ✅ COMPLETED
-Hardest parts to validate in isolation:
-- OpenAI: Generate 10Q sets with 6 options (A–F), 1 correct, hint, explanation_short; strict JSON; cache by (language, topic_normalized, prompt_version); schema validation + light sanity checks.
-- Real-time engine (FastAPI WebSockets): room lifecycle, per-question timer (server-authoritative), **first-correct wins (+2)**, incorrect locks player; hint event (-1, private to requester, notify rival), scoreboard sync.
-- Stripe: test-mode subscription + one-time; coupons/promo-codes; webhook signature verification; user entitlements state machine.
+Hardest parts validated in isolation:
+- OpenAI: Generate 10Q sets with 6 options (A–F), 1 correct, hint, explanation_short; strict JSON; cache by (language, topic_normalized, prompt_version); schema validation + sanity checks.
+- Real-time engine (FastAPI WebSockets): room lifecycle, per-question timer, **first-correct wins (+2)**, incorrect locks player; hint event (-1), scoreboard sync.
+- Stripe: test-mode checkout creation + webhook signature verification; transaction persistence.
 
 POC Deliverables ✅
 - test_core.py: LLM schema/cache, WS duel loopback, Stripe flows, ELO.
@@ -40,90 +40,69 @@ Core features delivered ✅
 
 ### Phase 3: Hardening / Production Fixes (Current Focus)
 
-#### Phase 3.1: Match Logic – Simultaneous Answering (P0) 🔥 IN PROGRESS
-**Why:** User corrected the intended gameplay. Current backend comment indicates “turn-based wrong answers”, and the frontend has remnants of “turns” messaging. We must enforce **simultaneous** answering (race-to-correct) for fairness.
+#### Phase 3.1: Match Logic – Simultaneous Answering (P0) ✅ COMPLETED
+**Why:** Gameplay requirement clarified: **both players start at the same time**, no turns.
 
-**Target rules (authoritative):**
+**Authoritative rules implemented:**
 - Both players can answer immediately when a question starts.
 - **First correct answer wins** the +2 points for that question.
 - If a player answers incorrectly, they are locked out for the rest of that question.
 - The other player remains eligible to answer (if they haven’t answered wrong yet).
 - If time expires with **no correct answer**, 0 points for both.
 
-**Implementation tasks:**
+**Implementation (done):**
 1. **Backend (server-authoritative):**
-   - Update `/ws/match/{match_id}` handlers to explicitly implement the simultaneous model.
-   - Maintain per-question state using `match_events` (already present) or a small per-question state doc:
-     - Record first `correct_answer` event and ignore later correct attempts.
-     - Ensure each user can have at most one `incorrect_answer` per question (lockout) and cannot spam submissions.
-   - Add/ensure a per-question “start timestamp” and server-side timeout behavior (preferably server-triggered).
-     - If keeping client-sent `time_up`, ensure idempotency (already present) and prevent double-advancing.
+   - Updated `/ws/match/{match_id}` gameplay handler `handle_answer_submission()`:
+     - Records only the first `correct_answer` event per question.
+     - Locks out only the user who answered incorrectly.
+     - Prevents answer spamming by rejecting repeated submissions per user/question.
+   - `handle_time_up()` keeps 0 points if no correct answer.
 2. **Frontend:**
-   - Remove “turn-based” language like “Es tu turno” and replace with “Sigue intentando / Tu rival falló, aún puedes responder” where appropriate.
-   - Ensure UI lockout is per-player only:
-     - On wrong answer: lock only the local player; don’t imply turns.
-     - If opponent wrong: keep local enabled if not answered yet.
-   - Keep 15s timer UI consistent with server events.
-3. **Testing (must-pass):**
-   - Two-player E2E test via WebSocket:
-     - Both answer concurrently; first correct gets points.
-     - Wrong then opponent correct still awards opponent.
-     - Time up with no correct → 0 points.
-     - Late submissions after correct/time_up are ignored.
+   - Updated Match UI to remove turn-based messaging.
+   - Lockout is per-player (local `isLocked` state), not “turn passing”.
+3. **Testing:**
+   - Verified by testing agent: **100% of simultaneous-logic requirements**.
 
-**Acceptance criteria:**
-- No “turn” mechanics; both start active.
-- Server determines winner of question deterministically.
-- No double-scoring; no race conditions across clients.
+**Acceptance criteria:** ✅ Met
+- No “turn” mechanics.
+- Deterministic first-correct resolution.
+- No double-scoring; spam prevention in place.
 
 ---
 
-#### Phase 3.2: Stripe Integration for Store – Real Payments for 50 Games (P0) 🔥 NOT STARTED
-**Why:** `/store` currently uses a demo flow that confirms purchase immediately. Requirement: when user taps “Comprar Ahora”, they must be redirected to Stripe to pay for **50 games ($99 MXN)**.
+#### Phase 3.2: Stripe Integration for Store – Real Payments for 50 Games (P0) ✅ COMPLETED
+**Why:** `/store` previously used a demo flow. Requirement: “Comprar Ahora” must redirect to Stripe to pay for **50 games ($99 MXN)**.
 
-**Target flow:**
+**Target flow implemented:**
 1. User clicks **Comprar Ahora** on `/store`.
-2. Backend creates a Stripe Checkout session for the “50 games” product.
+2. Backend creates a Stripe Checkout session (amount defined server-side).
 3. Frontend redirects to Stripe Checkout URL.
-4. Stripe returns to a success URL.
+4. Stripe returns to a success URL with `session_id`.
 5. Backend webhook marks payment as completed and credits the user with +50 games.
-6. Store page refreshes credits from `/api/users/credits`.
+6. Success page polls backend for payment status and then refreshes user credits.
 
-**Implementation tasks:**
-1. **Design decisions / alignment:**
-   - Use Stripe Checkout (hosted) for fastest and safest launch.
-   - Use **webhooks** as the source of truth for granting credits.
-   - Coupons:
-     - If using existing in-app coupons (discount/free games), decide whether to apply as:
-       - (A) Stripe promotion codes, or
-       - (B) backend-calculated discounts that change the Checkout amount.
-2. **Backend:**
-   - Add endpoint (or adapt existing) e.g. `POST /api/games/checkout` that:
-     - Validates user auth.
-     - Creates Stripe Checkout session for 99 MXN.
-     - Stores a purchase intent with `status=pending`, `stripe_session_id`, `user_id`, `games_quantity=50`, `final_price`, coupon info.
-   - Update webhook handler to:
-     - Verify signature.
-     - On `checkout.session.completed` (and/or `payment_intent.succeeded`), find purchase by session id and mark `completed`.
-     - Increment user’s `games_remaining` by 50.
-     - Ensure idempotency (webhook retries).
-3. **Frontend (/store):**
-   - Replace demo confirm flow (`/api/games/confirm-purchase/{id}` immediate) with redirect to Stripe:
-     - Call backend checkout endpoint → receive `checkout_url` → `window.location.href = checkout_url`.
-   - Add return pages (if not existing) e.g. `/payment/success` and `/payment/cancel`:
-     - Success page polls backend to confirm payment status then navigates back to `/store`.
-4. **Testing:**
-   - Test in Stripe test mode end-to-end.
-   - Verify: user credits increase only after webhook confirms payment.
+**Implementation (done):**
+1. **Backend:**
+   - `POST /api/games/purchase` now creates a real Stripe Checkout session for **MXN 99.00** (discounts applied server-side), stores purchase + transaction records.
+   - `POST /api/webhook/stripe` updated to grant credits for the `50_games` product with **idempotency** (updates purchase from `pending`→`completed` before incrementing credits).
+   - `GET /api/payments/checkout/status/{session_id}` added for post-return polling and “finalization” safety.
+   - Legacy `POST /api/games/confirm-purchase/{id}` is now deprecated (returns error).
+2. **Frontend:**
+   - `/store` updated to redirect to `checkout_url` returned by backend.
+   - Added `/payment-success` page with polling UI and automatic redirect.
+   - Router updated to include `/payment-success` protected route.
+3. **Testing:**
+   - Verified by testing agent: **100% integration pass**.
 
-**Acceptance criteria:**
-- Clicking “Comprar Ahora” always redirects to Stripe Checkout.
-- Completing payment credits +50 games reliably (webhook-driven).
-- No duplicate credit grants on webhook retries.
+**Acceptance criteria:** ✅ Met
+- Clicking “Comprar Ahora” redirects to Stripe Checkout.
+- Completing payment credits +50 games (webhook-driven).
+- No duplicate credits from webhook retries or polling.
 
 ---
 
-### Phase 4: Enhancements
+### Phase 4: Enhancements (Next)
+- **Server-authoritative timer** (optional hardening): move from client-sent `time_up` to server-driven per-question timeout to remove any reliance on the client.
 - Push notifications (FCM/APNs) (Not Started)
 - Ads (later)
 - Anti-cheat/observability, PWA install prompts, offline caching
@@ -134,16 +113,22 @@ Core features delivered ✅
 - **Matchmaking notification bug fix:** ✅ Completed
 - **Brand identity:** ✅ Completed
 - **Google OAuth + Remember Me:** ✅ Completed
-- **Credits & coupons system:** ✅ Completed (but Store purchase flow still demo)
+- **Credits & coupons system:** ✅ Completed
+- **Phase 3.1 Simultaneous match logic:** ✅ Completed (tested)
+- **Phase 3.2 Stripe Checkout for 50 games:** ✅ Completed (tested)
 
 ### Current P0 Work Items (Next)
-1. **Fix match logic to simultaneous (race-to-correct)** (Backend + Frontend + tests)
-2. **Integrate real Stripe Checkout for 50 games / $99 MXN** and connect to `/store`
+1. **Production hardening of timers** (server-authoritative timeouts, reduce client dependence) – optional but recommended.
+2. **Operational readiness**:
+   - Ensure Stripe webhook endpoint is reachable in production and configured in Stripe Dashboard.
+   - Add monitoring/logging for failed webhooks and payment reconciliation.
 
 ## 4) Success Criteria
 - Gameplay fairness:
   - Server-authoritative simultaneous answering; first correct wins; wrong locks only that player; timeouts yield 0 points.
 - Monetization correctness:
   - Store purchase uses real Stripe Checkout; webhooks grant credits; idempotent and reliable.
+  - Post-return polling confirms status and updates UI reliably.
 - Quality:
-  - No red-screen errors; consistent /api prefix; correct Mongo serialization; E2E tests cover race conditions + payment flows.
+  - No red-screen errors; consistent /api prefix; correct Mongo serialization.
+  - E2E tests cover race conditions + payment flows.

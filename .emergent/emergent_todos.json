@@ -1,14 +1,6 @@
 [
   {
-    "content": "Actualizar StorePage.jsx para redirigir a Stripe en lugar de confirmar inmediatamente",
-    "status": "completed"
-  },
-  {
-    "content": "Implementar página de success/cancel para polling de status",
-    "status": "completed"
-  },
-  {
     "content": "Probar flujo completo de compra end-to-end con Stripe (modo test)",
-    "status": "in_progress"
+    "status": "completed"
   }
 ]
