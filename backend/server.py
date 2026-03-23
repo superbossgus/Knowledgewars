@@ -11,6 +11,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
+# Load environment FIRST before any local imports
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient, DESCENDING
@@ -28,9 +31,6 @@ from utils import (
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse
 )
-
-# Load environment
-load_dotenv()
 
 # Initialize FastAPI
 app = FastAPI(title="Knowledge Wars API")
