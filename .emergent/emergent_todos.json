@@ -1,34 +1,14 @@
 [
   {
-    "content": "Corregir lógica de match a simultánea (ambos jugadores responden al mismo tiempo) en backend /ws/match handlers",
-    "status": "completed"
-  },
-  {
-    "content": "Actualizar frontend MatchPage.jsx para reflejar lógica simultánea (remover mensajes de 'turnos')",
-    "status": "completed"
-  },
-  {
-    "content": "Probar lógica de match con 2 usuarios: ambos responden simultáneamente, primero correcto gana",
-    "status": "in_progress"
-  },
-  {
-    "content": "Llamar integration_playbook_expert para obtener playbook de Stripe Checkout",
-    "status": "pending"
-  },
-  {
-    "content": "Implementar endpoint backend para crear Stripe Checkout session (50 juegos / $99 MXN)",
-    "status": "pending"
-  },
-  {
     "content": "Actualizar StorePage.jsx para redirigir a Stripe en lugar de confirmar inmediatamente",
-    "status": "pending"
+    "status": "completed"
   },
   {
-    "content": "Implementar webhook handler de Stripe para acreditar 50 juegos cuando el pago se complete",
-    "status": "pending"
+    "content": "Implementar página de success/cancel para polling de status",
+    "status": "completed"
   },
   {
     "content": "Probar flujo completo de compra end-to-end con Stripe (modo test)",
-    "status": "pending"
+    "status": "in_progress"
   }
 ]

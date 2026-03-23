@@ -33,34 +33,24 @@ export default function StorePage() {
   const handlePurchase = async () => {
     setPurchasing(true);
     try {
-      const purchaseResponse = await api.post('/api/games/purchase');
+      // Get current origin for success/cancel URLs
+      const origin = window.location.origin;
       
-      // Show purchase details
-      const { base_price_mxn, final_price_mxn, discount_applied } = purchaseResponse.data;
+      const purchaseResponse = await api.post('/api/games/purchase', null, {
+        headers: {
+          'Origin': origin
+        }
+      });
       
-      if (discount_applied) {
-        toast.success(`¡Descuento del ${discount_applied.percentage}% aplicado! Precio: $${final_price_mxn} MXN`);
+      // Redirect to Stripe Checkout
+      if (purchaseResponse.data.checkout_url) {
+        window.location.href = purchaseResponse.data.checkout_url;
+      } else {
+        throw new Error('No se recibió URL de pago');
       }
       
-      // For demo purposes, confirm purchase immediately
-      // In production, this would redirect to Stripe/payment gateway
-      const confirmResponse = await api.post(`/api/games/confirm-purchase/${purchaseResponse.data.purchase_id}`);
-      
-      toast.success(confirmResponse.data.message);
-      setCredits(prev => ({
-        ...prev,
-        games_remaining: confirmResponse.data.games_remaining,
-        low_credits_warning: confirmResponse.data.games_remaining <= 5
-      }));
-      
-      // Refresh user data
-      const meResponse = await api.get('/api/auth/me');
-      const token = localStorage.getItem('auth_token');
-      setAuth(meResponse.data, token);
-      
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Error al procesar compra');
-    } finally {
+      toast.error(error.response?.data?.detail || 'Error al iniciar compra');
       setPurchasing(false);
     }
   };

@@ -12,6 +12,7 @@ import MatchPage from './pages/MatchPage';
 import ResultsPage from './pages/ResultsPage';
 import RankingsPage from './pages/RankingsPage';
 import StorePage from './pages/StorePage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AdminPage from './pages/AdminPage';
 import './i18n';
@@ -317,6 +318,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <StorePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment-success"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccessPage />
             </ProtectedRoute>
           }
         />

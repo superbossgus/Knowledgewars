@@ -650,10 +650,10 @@ async def redeem_coupon(data: CouponRedeemRequest, current_user: dict = Depends(
     return result
 
 @app.post("/api/games/purchase")
-async def purchase_games(current_user: dict = Depends(get_current_user)):
+async def purchase_games(request: Request, current_user: dict = Depends(get_current_user)):
     """
-    Purchase 50 games for $99 MXN
-    This creates a checkout session for payment
+    Purchase 50 games for $99 MXN via Stripe Checkout
+    Returns Stripe checkout URL for payment
     """
     user = users_col.find_one({"_id": ObjectId(current_user["id"])})
     
@@ -661,88 +661,166 @@ async def purchase_games(current_user: dict = Depends(get_current_user)):
     pending_discount = user.get("pending_discount")
     
     # Calculate price
-    base_price = 9900  # $99 MXN in centavos
-    final_price = base_price
+    base_price_mxn = 99.00  # $99 MXN
+    final_price_mxn = base_price_mxn
     discount_applied = None
     
     if pending_discount:
         discount_pct = pending_discount.get("percentage", 0)
-        final_price = int(base_price * (100 - discount_pct) / 100)
+        final_price_mxn = round(base_price_mxn * (100 - discount_pct) / 100, 2)
         discount_applied = {
             "code": pending_discount.get("code"),
-            "percentage": discount_pct,
-            "savings": base_price - final_price
+            "percentage": discount_pct
         }
     
-    # Create purchase record
+    # Get frontend origin from request header (for success/cancel URLs)
+    origin_url = str(request.headers.get("origin", ""))
+    if not origin_url:
+        raise HTTPException(status_code=400, detail="Origin header required")
+    
+    # Create purchase record with pending status
     purchase_id = str(uuid.uuid4())
     purchases_col.insert_one({
         "purchase_id": purchase_id,
         "user_id": str(current_user["id"]),
         "product": "50_games",
         "games_quantity": 50,
-        "base_price": base_price,
-        "final_price": final_price,
+        "base_price": int(base_price_mxn * 100),  # Store in centavos
+        "final_price": int(final_price_mxn * 100),
         "discount_applied": discount_applied,
         "status": "pending",
         "created_at": datetime.now(timezone.utc)
     })
     
+    # Initialize Stripe Checkout
+    host_url = str(request.base_url).rstrip('/')
+    webhook_url = f"{host_url}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    
+    # Build success and cancel URLs
+    success_url = f"{origin_url}/payment-success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin_url}/store"
+    
+    # Create Stripe checkout session
+    checkout_request = CheckoutSessionRequest(
+        amount=final_price_mxn,
+        currency="mxn",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "purchase_id": purchase_id,
+            "user_id": str(current_user["id"]),
+            "product": "50_games",
+            "email": current_user.get("email", "")
+        }
+    )
+    
+    session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(checkout_request)
+    
+    # Store session_id in purchase record
+    purchases_col.update_one(
+        {"purchase_id": purchase_id},
+        {"$set": {"stripe_session_id": session.session_id}}
+    )
+    
+    # Also store in payment_transactions for tracking
+    payment_transactions_col.insert_one({
+        "purchase_id": purchase_id,
+        "user_id": str(current_user["id"]),
+        "session_id": session.session_id,
+        "amount": final_price_mxn,
+        "currency": "mxn",
+        "status": "initiated",
+        "payment_status": "pending",
+        "created_at": datetime.now(timezone.utc)
+    })
+    
     return {
         "success": True,
-        "purchase_id": purchase_id,
-        "product": "50 Partidas",
-        "base_price_mxn": base_price / 100,
-        "final_price_mxn": final_price / 100,
-        "discount_applied": discount_applied,
-        "message": "Redirigiendo a pago..."
+        "checkout_url": session.url,
+        "session_id": session.session_id
     }
 
 @app.post("/api/games/confirm-purchase/{purchase_id}")
 async def confirm_purchase(purchase_id: str, current_user: dict = Depends(get_current_user)):
     """
-    Confirm a purchase and add games to user account
-    In production, this would be called by payment webhook
+    DEPRECATED: For backward compatibility only
+    Actual payment confirmation should happen via webhook or status polling
     """
-    purchase = purchases_col.find_one({
-        "purchase_id": purchase_id,
-        "user_id": str(current_user["id"]),
-        "status": "pending"
+    raise HTTPException(
+        status_code=400, 
+        detail="Este endpoint está deprecado. El pago se confirma via webhook de Stripe."
+    )
+
+
+@app.get("/api/payments/checkout/status/{session_id}")
+async def get_checkout_status(session_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Poll Stripe checkout session status
+    Frontend should call this after returning from Stripe
+    """
+    # Find the transaction
+    transaction = payment_transactions_col.find_one({
+        "session_id": session_id,
+        "user_id": str(current_user["id"])
     })
     
-    if not purchase:
-        raise HTTPException(status_code=404, detail="Compra no encontrada")
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transacción no encontrada")
     
-    games_to_add = purchase.get("games_quantity", 50)
+    # Initialize Stripe and check status
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
+    status_response = await stripe_checkout.get_checkout_status(session_id)
     
-    # Add games to user account
-    users_col.update_one(
-        {"_id": ObjectId(current_user["id"])},
-        {
-            "$inc": {
-                "games_remaining": games_to_add,
-                "total_games_purchased": games_to_add
-            },
-            "$unset": {"pending_discount": ""}  # Clear used discount
-        }
-    )
+    # If payment is completed and we haven't processed it yet
+    if status_response.payment_status == "paid" and transaction.get("payment_status") != "paid":
+        # Find the purchase record
+        purchase = purchases_col.find_one({"stripe_session_id": session_id})
+        
+        if purchase and purchase.get("status") == "pending":
+            games_to_add = purchase.get("games_quantity", 50)
+            user_id = purchase.get("user_id")
+            
+            # Update user's game credits (IDEMPOTENCY: only if purchase is still pending)
+            result = purchases_col.update_one(
+                {"stripe_session_id": session_id, "status": "pending"},
+                {"$set": {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc)
+                }}
+            )
+            
+            if result.modified_count > 0:
+                # Add games to user account
+                users_col.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {
+                        "$inc": {
+                            "games_remaining": games_to_add,
+                            "total_games_purchased": games_to_add
+                        },
+                        "$unset": {"pending_discount": ""}  # Clear used discount
+                    }
+                )
+        
+        # Update transaction status
+        payment_transactions_col.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "payment_status": "paid",
+                "status": "completed",
+                "updated_at": datetime.now(timezone.utc)
+            }}
+        )
     
-    # Update purchase status
-    purchases_col.update_one(
-        {"purchase_id": purchase_id},
-        {"$set": {
-            "status": "completed",
-            "completed_at": datetime.now(timezone.utc)
-        }}
-    )
-    
-    # Get updated user
-    updated_user = users_col.find_one({"_id": ObjectId(current_user["id"])})
+    # Get updated user games
+    user = users_col.find_one({"_id": ObjectId(current_user["id"])})
     
     return {
-        "success": True,
-        "message": f"¡{games_to_add} partidas añadidas a tu cuenta!",
-        "games_remaining": updated_user.get("games_remaining", 0)
+        "status": status_response.status,
+        "payment_status": status_response.payment_status,
+        "games_remaining": user.get("games_remaining", 0),
+        "completed": status_response.payment_status == "paid"
     }
 
 @app.post("/api/games/use-credit")
@@ -2064,41 +2142,77 @@ async def stripe_webhook(request: Request):
     try:
         webhook_response = await stripe_checkout.handle_webhook(body, signature)
         
-        # Handle event
-        if webhook_response.event_type in ["checkout.session.completed", "invoice.paid"]:
+        # Handle payment completion events
+        if webhook_response.event_type in ["checkout.session.completed", "payment_intent.succeeded"]:
             session_id = webhook_response.session_id
             metadata = webhook_response.metadata
             
-            # Update transaction
+            # Find purchase by session_id
+            purchase = purchases_col.find_one({"stripe_session_id": session_id})
+            
+            if purchase and purchase.get("status") == "pending":
+                # Get purchase details
+                games_to_add = purchase.get("games_quantity", 50)
+                user_id = purchase.get("user_id")
+                product = metadata.get("product", "")
+                
+                # Process based on product type
+                if product == "50_games":
+                    # IDEMPOTENCY: Update purchase status first
+                    result = purchases_col.update_one(
+                        {"stripe_session_id": session_id, "status": "pending"},
+                        {"$set": {
+                            "status": "completed",
+                            "completed_at": datetime.now(timezone.utc)
+                        }}
+                    )
+                    
+                    # Only add games if purchase was actually updated (prevents duplicates)
+                    if result.modified_count > 0:
+                        users_col.update_one(
+                            {"_id": ObjectId(user_id)},
+                            {
+                                "$inc": {
+                                    "games_remaining": games_to_add,
+                                    "total_games_purchased": games_to_add
+                                },
+                                "$unset": {"pending_discount": ""}
+                            }
+                        )
+                        print(f"✅ Webhook: Added {games_to_add} games to user {user_id}")
+                
+                # Legacy support for old product types
+                elif product == "premium_subscription":
+                    users_col.update_one(
+                        {"_id": ObjectId(user_id)},
+                        {"$set": {
+                            "premium_status": True,
+                            "premium_expiration": datetime.now(timezone.utc) + timedelta(days=30)
+                        }}
+                    )
+                
+                elif product == "consumable_100":
+                    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+                    duel_counters_col.update_one(
+                        {"user_id": ObjectId(user_id), "month": current_month},
+                        {"$inc": {"consumable_extra_100": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}},
+                        upsert=True
+                    )
+            
+            # Update transaction record
             payment_transactions_col.update_one(
                 {"session_id": session_id},
-                {"$set": {"payment_status": "paid", "status": "completed", "updated_at": datetime.utcnow()}}
+                {"$set": {
+                    "payment_status": "paid",
+                    "status": "completed",
+                    "updated_at": datetime.now(timezone.utc)
+                }}
             )
-            
-            # Apply benefits
-            user_id = metadata.get("user_id")
-            product_type = metadata.get("product_type")
-            
-            if user_id and product_type == "premium_subscription":
-                users_col.update_one(
-                    {"_id": ObjectId(user_id)},
-                    {"$set": {
-                        "premium_status": True,
-                        "premium_expiration": datetime.utcnow() + timedelta(days=30)
-                    }}
-                )
-            
-            elif user_id and product_type == "consumable_100":
-                current_month = datetime.utcnow().strftime("%Y-%m")
-                duel_counters_col.update_one(
-                    {"user_id": ObjectId(user_id), "month": current_month},
-                    {"$inc": {"consumable_extra_100": 1}, "$set": {"updated_at": datetime.utcnow()}},
-                    upsert=True
-                )
         
         return {"status": "success"}
     
     except Exception as e:
+        print(f"❌ Webhook error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
