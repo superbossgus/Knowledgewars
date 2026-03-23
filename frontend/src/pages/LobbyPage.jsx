@@ -222,10 +222,19 @@ export default function LobbyPage() {
             <select
               value={selectedTopic}
               onChange={(e) => setSelectedTopic(e.target.value)}
-              className="w-full px-4 py-3 bg-background/80 border-2 border-[hsl(220,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(220,100%,50%)] focus:border-[hsl(220,100%,50%)] focus:outline-none text-white font-medium transition-all"
+              className="w-full px-4 py-3 bg-[hsl(220,30%,15%)] border-2 border-[hsl(220,100%,50%,0.3)] rounded-xl focus:ring-2 focus:ring-[hsl(220,100%,50%)] focus:border-[hsl(220,100%,50%)] focus:outline-none text-white font-bold text-lg transition-all cursor-pointer"
+              style={{ 
+                colorScheme: 'dark'
+              }}
             >
               {PREDEFINED_TOPICS.map(topic => (
-                <option key={topic} value={topic}>{translateTopic(topic)}</option>
+                <option 
+                  key={topic} 
+                  value={topic}
+                  className="bg-[hsl(220,30%,15%)] text-white py-2"
+                >
+                  {translateTopic(topic)}
+                </option>
               ))}
             </select>
           ) : (
