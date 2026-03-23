@@ -8,7 +8,7 @@ import { AnswerOption } from '../components/custom/AnswerOption';
 import { ScoreBoard } from '../components/custom/ScoreBoard';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { Lightbulb, AlertCircle, Zap } from 'lucide-react';
+import { Lightbulb, AlertCircle, Zap, Flag, X } from 'lucide-react';
 
 export default function MatchPage() {
   const { matchId } = useParams();
@@ -28,6 +28,7 @@ export default function MatchPage() {
   const [hintText, setHintText] = useState('');
   const [showHintDialog, setShowHintDialog] = useState(false);
   const [opponentAnsweredWrong, setOpponentAnsweredWrong] = useState(false);
+  const [showSurrenderDialog, setShowSurrenderDialog] = useState(false);
   
   const wsRef = useRef(null);
   const timerRef = useRef(null);
@@ -237,6 +238,26 @@ export default function MatchPage() {
     setShowHintDialog(false);
   };
 
+  const handleSurrenderClick = () => {
+    setShowSurrenderDialog(true);
+  };
+
+  const handleConfirmSurrender = async () => {
+    try {
+      await api.post(`/api/matches/${matchId}/surrender`);
+      toast.error('Te has rendido. El oponente gana por rendición.', {
+        icon: <Flag className="w-5 h-5" />
+      });
+      navigate('/home');
+    } catch (error) {
+      toast.error('Error al rendirse');
+    }
+  };
+
+  const handleCancelSurrender = () => {
+    setShowSurrenderDialog(false);
+  };
+
   if (!match || !match.questions || match.questions.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center relative z-10">
@@ -256,6 +277,16 @@ export default function MatchPage() {
       <div className="container mx-auto max-w-4xl">
         {/* Header with Scoreboard and Timer */}
         <div className="sticky top-2 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/60 to-transparent p-4 backdrop-blur-xl rounded-2xl mb-6 border-2 border-[hsl(220,100%,50%,0.3)]" style={{ boxShadow: '0 0 30px hsl(220 100% 50% / 0.2)' }}>
+          {/* Surrender Button (Top Left) */}
+          <button
+            onClick={handleSurrenderClick}
+            className="absolute top-4 left-4 p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 transition-all group"
+            data-testid="surrender-button"
+            title="Rendirse"
+          >
+            <Flag className="w-5 h-5 text-red-400 group-hover:text-red-300" />
+          </button>
+          
           <ScoreBoard
             me={{
               name: isPlayerA ? match.player_a_name : match.player_b_name,
@@ -372,6 +403,44 @@ export default function MatchPage() {
                 data-testid="confirm-hint-button"
               >
                 Confirmar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Surrender Confirmation Dialog */}
+      {showSurrenderDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-card/95 border-2 border-red-500/50 rounded-2xl p-6 max-w-md w-full backdrop-blur-xl"
+            style={{ boxShadow: '0 0 40px rgb(239 68 68 / 0.3)' }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <Flag className="w-7 h-7 text-red-400" />
+              <h3 className="text-xl font-bold text-white font-brand">¿Rendirse?</h3>
+            </div>
+            <p className="text-muted-foreground mb-6">
+              ¿Estás seguro que quieres <strong className="text-red-400">rendirte</strong> y regresar al menú de juego? 
+              <br /><br />
+              Tu oponente ganará automáticamente por <strong className="text-red-400">rendición</strong> y tú perderás <strong className="text-red-400">-1 punto de ELO</strong>.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelSurrender}
+                className="flex-1 btn-secondary-glass py-3"
+                data-testid="cancel-surrender-button"
+              >
+                Continuar Jugando
+              </button>
+              <button
+                onClick={handleConfirmSurrender}
+                className="flex-1 py-3 rounded-lg font-bold bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50 text-red-300 hover:text-red-200 transition-all"
+                data-testid="confirm-surrender-button"
+              >
+                Sí, Rendirme
               </button>
             </div>
           </motion.div>

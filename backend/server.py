@@ -1485,6 +1485,89 @@ async def cancel_match(match_id: str, current_user: dict = Depends(get_current_u
     return {"success": True, "message": "Desafío cancelado"}
 
 
+@app.post("/api/matches/{match_id}/surrender")
+async def surrender_match(match_id: str, current_user: dict = Depends(get_current_user)):
+    """Surrender an active match - opponent wins automatically"""
+    match = matches_col.find_one({"_id": ObjectId(match_id)})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    # Check authorization - must be a participant
+    if str(match["player_a_id"]) != current_user["id"] and str(match["player_b_id"]) != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Can only surrender active matches
+    if match["status"] != "active":
+        raise HTTPException(status_code=400, detail="Solo se puede rendir durante una partida activa")
+    
+    # Determine who surrendered and who wins
+    is_player_a = str(match["player_a_id"]) == current_user["id"]
+    winner_id = match["player_b_id"] if is_player_a else match["player_a_id"]
+    loser_id = ObjectId(current_user["id"])
+    
+    # Get both players for ELO calculation
+    winner = users_col.find_one({"_id": winner_id})
+    loser = users_col.find_one({"_id": loser_id})
+    
+    # Calculate ELO changes (surrender = automatic loss = -1 for loser, +2 for winner)
+    elo_calc = ELOCalculator()
+    winner_new_elo, loser_new_elo = elo_calc.calculate_new_ratings(
+        winner.get("elo_rating", 500),
+        loser.get("elo_rating", 500),
+        winner_won=True  # Winner wins
+    )
+    
+    winner_elo_delta = winner_new_elo - winner.get("elo_rating", 500)
+    loser_elo_delta = loser_new_elo - loser.get("elo_rating", 500)
+    
+    # Update match status
+    matches_col.update_one(
+        {"_id": ObjectId(match_id)},
+        {"$set": {
+            "status": "finished",
+            "ended_at": datetime.now(timezone.utc),
+            "winner_id": winner_id,
+            "win_reason": "surrender",
+            "elo_delta_a": winner_elo_delta if is_player_a else loser_elo_delta,
+            "elo_delta_b": loser_elo_delta if is_player_a else winner_elo_delta
+        }}
+    )
+    
+    # Update ELO ratings
+    users_col.update_one(
+        {"_id": winner_id},
+        {"$set": {"elo_rating": winner_new_elo}}
+    )
+    users_col.update_one(
+        {"_id": loser_id},
+        {"$set": {"elo_rating": loser_new_elo}}
+    )
+    
+    # Notify opponent that they won
+    opponent_id = str(match["player_b_id"]) if is_player_a else str(match["player_a_id"])
+    await manager.send_message(opponent_id, {
+        "type": "opponent_surrendered",
+        "match_id": match_id,
+        "message": f"¡{current_user['display_name']} se rindió! Has ganado por rendición.",
+        "elo_gained": winner_elo_delta
+    })
+    
+    # Also send match_finished to close the match page
+    await manager.broadcast_to_match(match_id, {
+        "type": "match_finished",
+        "match_id": match_id,
+        "winner_id": str(winner_id),
+        "win_reason": "surrender"
+    })
+    
+    return {
+        "success": True,
+        "message": "Te has rendido",
+        "winner_id": str(winner_id),
+        "elo_lost": loser_elo_delta
+    }
+
+
 @app.get("/api/matches/pending")
 async def get_pending_matches(current_user: dict = Depends(get_current_user)):
     """Get pending match challenges for current user - excludes expired ones"""
