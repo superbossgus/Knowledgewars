@@ -36,7 +36,7 @@ export default function LobbyPage() {
   const [topicMode, setTopicMode] = useState('list'); // 'list' or 'custom'
   const [loading, setLoading] = useState(true);
   const [challenging, setChallenging] = useState(false);
-  const [showAllRanks, setShowAllRanks] = useState(false); // Show all ranks or just my tier
+  const [showAllRanks, setShowAllRanks] = useState(true); // Default: show all ranks
   const [searchUsername, setSearchUsername] = useState(''); // Search by username
   const [searchResults, setSearchResults] = useState(null); // Search results
 
