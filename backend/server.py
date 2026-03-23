@@ -1523,6 +1523,23 @@ async def get_pending_matches(current_user: dict = Depends(get_current_user)):
     return {"matches": serialize_doc(matches)}
 
 
+@app.get("/api/matches/my-active")
+async def get_my_active_match(current_user: dict = Depends(get_current_user)):
+    """Check if user has an active match and return it"""
+    match = matches_col.find_one({
+        "$or": [
+            {"player_a_id": ObjectId(current_user["id"])},
+            {"player_b_id": ObjectId(current_user["id"])}
+        ],
+        "status": "active"
+    })
+    
+    if match:
+        return {"match": serialize_doc(match)}
+    else:
+        return {"match": None}
+
+
 @app.get("/api/matches/{match_id}")
 async def get_match(match_id: str, current_user: dict = Depends(get_current_user)):
     """Get match details"""

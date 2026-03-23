@@ -34,7 +34,30 @@ export default function HomePage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+    
+    // Poll for active matches (in case WebSocket notification fails)
+    const checkActiveMatches = async () => {
+      try {
+        const response = await api.get('/api/matches/my-active');
+        if (response.data.match) {
+          // User has an active match, navigate to it immediately
+          const matchId = response.data.match.id;
+          console.log('🎮 Active match found, navigating to:', matchId);
+          navigate(`/match/${matchId}`);
+        }
+      } catch (error) {
+        // Silently fail
+      }
+    };
+    
+    // Check immediately
+    checkActiveMatches();
+    
+    // Poll every 2 seconds
+    const interval = setInterval(checkActiveMatches, 2000);
+    
+    return () => clearInterval(interval);
+  }, [navigate]);
 
   const loadData = async () => {
     try {

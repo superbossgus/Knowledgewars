@@ -52,6 +52,9 @@ export default function MatchPage() {
       setMatch(response.data.match);
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
+      
+      // Start timer immediately when match loads (fallback if WebSocket fails)
+      startTimer();
     } catch (error) {
       toast.error('Error al cargar la partida');
       navigate('/home');
