@@ -83,7 +83,7 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
 }
 
 // Custom hook for WebSocket notifications
-function useNotificationSocket(token, user, onChallengeReceived, onChallengeAccepted, onChallengeRejected) {
+function useNotificationSocket(token, user, onChallengeReceived, onChallengeAccepted, onChallengeRejected, onMatchStarted) {
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   
@@ -111,6 +111,8 @@ function useNotificationSocket(token, user, onChallengeReceived, onChallengeAcce
               onChallengeAccepted(data);
             } else if (data.type === 'challenge_rejected') {
               onChallengeRejected(data);
+            } else if (data.type === 'match_started') {
+              onMatchStarted(data);
             }
           } catch (e) {
             console.error('Failed to parse WebSocket message:', e);
@@ -142,7 +144,7 @@ function useNotificationSocket(token, user, onChallengeReceived, onChallengeAcce
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [token, user?.id, onChallengeReceived, onChallengeAccepted, onChallengeRejected]);
+  }, [token, user?.id, onChallengeReceived, onChallengeAccepted, onChallengeRejected, onMatchStarted]);
 }
 
 function AppContent() {
@@ -182,11 +184,17 @@ function AppContent() {
       duration: 3000,
       icon: <Swords className="w-5 h-5 text-green-500" />
     });
-    // Navigate to the match
+    // Navigate to the match immediately
     if (data.match_id) {
-      setTimeout(() => {
-        navigate(`/match/${data.match_id}`);
-      }, 1000);
+      navigate(`/match/${data.match_id}`);
+    }
+  }, [navigate]);
+  
+  const handleMatchStarted = useCallback((data) => {
+    // This is sent to BOTH players when match starts
+    console.log('🎮 Match started:', data.match_id);
+    if (data.match_id) {
+      navigate(`/match/${data.match_id}`);
     }
   }, [navigate]);
   
@@ -197,7 +205,7 @@ function AppContent() {
   }, []);
   
   // Connect to WebSocket for real-time notifications
-  useNotificationSocket(token, user, handleChallengeReceived, handleChallengeAccepted, handleChallengeRejected);
+  useNotificationSocket(token, user, handleChallengeReceived, handleChallengeAccepted, handleChallengeRejected, handleMatchStarted);
 
   // Also poll for challenges as backup (every 3 seconds)
   useEffect(() => {
