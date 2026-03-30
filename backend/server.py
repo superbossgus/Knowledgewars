@@ -867,7 +867,7 @@ async def use_game_credit(current_user: dict = Depends(get_current_user)):
 # ADMIN ENDPOINTS (Coupon Management)
 # ============================================================================
 
-ADMIN_SECRET = os.getenv("ADMIN_SECRET", "knowledge-wars-admin-2024")
+ADMIN_SECRET = "knowledge-wars-admin-2024"  # Fixed secret, not using environment variables
 
 async def verify_admin(authorization: Optional[str] = Header(None)):
     """Verify admin access"""
