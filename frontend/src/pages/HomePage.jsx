@@ -35,28 +35,58 @@ export default function HomePage() {
   useEffect(() => {
     loadData();
     
-    // Poll for active matches (in case WebSocket notification fails)
+    // Poll for RECENTLY created active matches (in case WebSocket notification fails)
+    // This is ONLY for detecting matches that just started, not old matches
+    let pollCount = 0;
+    const maxPolls = 5; // Poll for 10 seconds only (5 polls x 2 seconds)
+    
     const checkActiveMatches = async () => {
       try {
+        pollCount++;
+        
+        // Stop polling after maxPolls attempts
+        if (pollCount > maxPolls) {
+          clearInterval(interval);
+          return;
+        }
+        
         const response = await api.get('/api/matches/my-active');
         if (response.data.match) {
-          // User has an active match, navigate to it immediately
-          const matchId = response.data.match.id;
-          console.log('🎮 Active match found, navigating to:', matchId);
-          navigate(`/match/${matchId}`);
+          const match = response.data.match;
+          const matchId = match.id;
+          
+          // Only navigate if match was created VERY recently (last 30 seconds)
+          // This prevents redirecting to old/stale matches
+          const matchCreatedAt = new Date(match.started_at || match.created_at);
+          const now = new Date();
+          const secondsSinceCreated = (now - matchCreatedAt) / 1000;
+          
+          if (secondsSinceCreated < 30) {
+            console.log('🎮 Recent active match found (created', secondsSinceCreated.toFixed(1), 's ago), navigating to:', matchId);
+            navigate(`/match/${matchId}`);
+            clearInterval(interval);
+          } else {
+            console.log('⏰ Found old match (created', secondsSinceCreated.toFixed(1), 's ago), ignoring');
+          }
         }
       } catch (error) {
         // Silently fail
       }
     };
     
-    // Check immediately
-    checkActiveMatches();
+    // Don't check immediately - give WebSocket a chance first
+    // Only start polling after 1 second
+    const initialTimeout = setTimeout(() => {
+      checkActiveMatches();
+    }, 1000);
     
-    // Poll every 2 seconds
+    // Poll every 2 seconds for 10 seconds total
     const interval = setInterval(checkActiveMatches, 2000);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
   }, [navigate]);
 
   const loadData = async () => {
