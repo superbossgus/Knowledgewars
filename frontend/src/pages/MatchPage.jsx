@@ -109,65 +109,23 @@ export default function MatchPage() {
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
       
-      // Check if there's a synchronized countdown start time in localStorage
-      const countdownStartStr = localStorage.getItem(`countdown_${matchId}`);
-      console.log('🔍 Checking countdown in localStorage:', countdownStartStr);
+      console.log('✅ Match loaded, waiting for synchronized countdown signal from server...');
       
-      if (countdownStartStr) {
-        // Start synchronized countdown
-        startSynchronizedCountdown(countdownStartStr);
-        localStorage.removeItem(`countdown_${matchId}`); // Clean up
-      } else {
-        // Check match creation time - if very recent (< 10s), wait a bit for sync
-        const matchStartedAt = new Date(response.data.match.started_at || response.data.match.created_at);
-        const timeSinceStart = (new Date() - matchStartedAt) / 1000;
-        
-        console.log('⏰ Match started', timeSinceStart.toFixed(1), 'seconds ago');
-        
-        if (timeSinceStart < 10) {
-          // Match just started, wait 2s for WebSocket sync
-          console.log('⏳ Waiting 2s for WebSocket sync...');
-          setTimeout(() => {
-            const syncStr = localStorage.getItem(`countdown_${matchId}`);
-            if (syncStr) {
-              startSynchronizedCountdown(syncStr);
-              localStorage.removeItem(`countdown_${matchId}`);
-            } else {
-              startCountdown();
-            }
-          }, 2000);
-        } else {
-          // Old match, start immediately
+      // DON'T start countdown here
+      // Wait for "start_countdown_now" message from server via WebSocket
+      // This ensures both players start at exactly the same time
+      
+      // Fallback: If WebSocket never sends signal (e.g., old match), start after 10s
+      setTimeout(() => {
+        if (showCountdown) {
+          console.log('⏰ Fallback: Starting countdown after 10s timeout');
           startCountdown();
         }
-      }
+      }, 10000);
+      
     } catch (error) {
       toast.error('Error al cargar la partida');
       navigate('/home');
-    }
-  };
-
-  const startSynchronizedCountdown = (countdownStartStr) => {
-    const countdownStart = new Date(countdownStartStr);
-    const now = new Date();
-    const msUntilStart = countdownStart - now;
-    
-    console.log('⏰ Synchronized countdown will start in', msUntilStart, 'ms');
-    
-    if (msUntilStart > 0 && msUntilStart < 10000) {
-      // Wait until countdown start time, then start
-      setTimeout(() => {
-        console.log('✅ Starting synchronized countdown NOW');
-        startCountdown();
-      }, msUntilStart);
-    } else if (msUntilStart <= 0 && msUntilStart > -3000) {
-      // Just missed it (within last 3s), start immediately
-      console.log('⚡ Countdown time passed, starting immediately');
-      startCountdown();
-    } else {
-      // Too far in past or future, start immediately
-      console.log('⏭️ Invalid countdown time, starting immediately');
-      startCountdown();
     }
   };
 
@@ -224,7 +182,14 @@ export default function MatchPage() {
     switch (data.type) {
       case 'match_state':
         setMatch(data.match);
-        // Don't start countdown/timer here, it's handled by loadMatch
+        // Don't start countdown here - wait for synchronized signal
+        break;
+      
+      case 'start_countdown_now':
+        // 🎯 SYNCHRONIZED COUNTDOWN SIGNAL FROM SERVER
+        // Both players receive this at the same time
+        console.log('🎯 Received synchronized countdown signal!');
+        startCountdown();
         break;
       
       case 'answer_result':

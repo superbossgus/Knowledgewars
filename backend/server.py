@@ -1400,8 +1400,8 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
         {"$inc": {"games_remaining": -1}}
     )
     
-    # Update match status with countdown start time
-    countdown_start = datetime.now(timezone.utc) + timedelta(seconds=1)  # Start in 1 second
+    # Update match status
+    countdown_start = datetime.now(timezone.utc) + timedelta(seconds=3)  # Start in 3 seconds
     matches_col.update_one(
         {"_id": ObjectId(match_id)},
         {"$set": {
@@ -1420,12 +1420,26 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
         "countdown_start": countdown_start.isoformat()
     })
     
-    # Notify both players to start the match with synchronized countdown
+    # Notify both players to navigate to match
     await manager.broadcast_to_match(match_id, {
         "type": "match_started",
         "match_id": match_id,
         "countdown_start": countdown_start.isoformat()
     })
+    
+    # CRITICAL: Wait 3 seconds, then send synchronized countdown start signal
+    # This ensures both players are on the page before countdown starts
+    async def send_countdown_signal():
+        await asyncio.sleep(3)
+        await manager.broadcast_to_match(match_id, {
+            "type": "start_countdown_now",
+            "match_id": match_id,
+            "message": "¡Iniciando countdown sincronizado!"
+        })
+        print(f"✅ Sent synchronized countdown signal to both players in match {match_id}")
+    
+    # Start the countdown signal task in background
+    asyncio.create_task(send_countdown_signal())
     
     return {"success": True, "match_id": match_id, "message": "¡Partida iniciada!"}
 
