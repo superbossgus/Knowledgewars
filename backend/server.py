@@ -1849,7 +1849,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             "timestamp": timestamp
         })
         
-        # Notify the user who answered wrong (they are now locked)
+        # Notify ONLY the user who answered wrong (they are now locked)
         await manager.send_message(user_id, {
             "type": "answer_result",
             "user_id": user_id,
@@ -1857,20 +1857,9 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
             "score_delta": 0
         })
         
-        # Check if opponent has already answered wrong too
-        opponent_wrong = match_events_col.find_one({
-            "match_id": ObjectId(match_id),
-            "user_id": ObjectId(opponent_id),
-            "question_index": question_index,
-            "event_type": "incorrect_answer"
-        })
-        
-        # Notify opponent (they can still try if they haven't answered yet)
-        if not opponent_wrong:
-            await manager.send_message(opponent_id, {
-                "type": "opponent_wrong",
-                "message": "Tu rival se equivocó. ¡Sigue intentando!"
-            })
+        # ❗ DO NOT notify opponent about wrong answer
+        # The opponent should NOT know the other player failed
+        # This keeps the game fair and prevents psychological advantage
 
 
 async def handle_time_up(match_id: str, user_id: str, data: dict):

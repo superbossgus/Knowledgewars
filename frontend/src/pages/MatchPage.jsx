@@ -35,6 +35,55 @@ export default function MatchPage() {
   const wsRef = useRef(null);
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
+  const audioContextRef = useRef(null);
+
+  // Initialize Web Audio API
+  useEffect(() => {
+    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Play success sound
+  const playSuccessSound = () => {
+    if (!audioContextRef.current) return;
+    const ctx = audioContextRef.current;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.frequency.value = 800; // Pleasant high frequency
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.15);
+  };
+
+  // Play error sound
+  const playErrorSound = () => {
+    if (!audioContextRef.current) return;
+    const ctx = audioContextRef.current;
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.frequency.value = 200; // Low, grave frequency
+    oscillator.type = 'sawtooth';
+    gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.25);
+  };
 
   useEffect(() => {
     loadMatch();
@@ -60,15 +109,37 @@ export default function MatchPage() {
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
       
-      // Check if there's a synchronized countdown start time
-      const countdownStartStr = sessionStorage.getItem(`countdown_${matchId}`);
+      // Check if there's a synchronized countdown start time in localStorage
+      const countdownStartStr = localStorage.getItem(`countdown_${matchId}`);
+      console.log('🔍 Checking countdown in localStorage:', countdownStartStr);
+      
       if (countdownStartStr) {
         // Start synchronized countdown
         startSynchronizedCountdown(countdownStartStr);
-        sessionStorage.removeItem(`countdown_${matchId}`); // Clean up
+        localStorage.removeItem(`countdown_${matchId}`); // Clean up
       } else {
-        // Fallback: start countdown immediately (for rejoins or if WebSocket failed)
-        startCountdown();
+        // Check match creation time - if very recent (< 10s), wait a bit for sync
+        const matchStartedAt = new Date(response.data.match.started_at || response.data.match.created_at);
+        const timeSinceStart = (new Date() - matchStartedAt) / 1000;
+        
+        console.log('⏰ Match started', timeSinceStart.toFixed(1), 'seconds ago');
+        
+        if (timeSinceStart < 10) {
+          // Match just started, wait 2s for WebSocket sync
+          console.log('⏳ Waiting 2s for WebSocket sync...');
+          setTimeout(() => {
+            const syncStr = localStorage.getItem(`countdown_${matchId}`);
+            if (syncStr) {
+              startSynchronizedCountdown(syncStr);
+              localStorage.removeItem(`countdown_${matchId}`);
+            } else {
+              startCountdown();
+            }
+          }, 2000);
+        } else {
+          // Old match, start immediately
+          startCountdown();
+        }
       }
     } catch (error) {
       toast.error('Error al cargar la partida');
@@ -83,13 +154,19 @@ export default function MatchPage() {
     
     console.log('⏰ Synchronized countdown will start in', msUntilStart, 'ms');
     
-    if (msUntilStart > 0 && msUntilStart < 5000) {
+    if (msUntilStart > 0 && msUntilStart < 10000) {
       // Wait until countdown start time, then start
       setTimeout(() => {
+        console.log('✅ Starting synchronized countdown NOW');
         startCountdown();
       }, msUntilStart);
+    } else if (msUntilStart <= 0 && msUntilStart > -3000) {
+      // Just missed it (within last 3s), start immediately
+      console.log('⚡ Countdown time passed, starting immediately');
+      startCountdown();
     } else {
-      // If time passed or invalid, start immediately
+      // Too far in past or future, start immediately
+      console.log('⏭️ Invalid countdown time, starting immediately');
       startCountdown();
     }
   };
@@ -154,6 +231,7 @@ export default function MatchPage() {
         if (data.user_id === user.id) {
           // My answer result
           if (data.result === 'correct') {
+            playSuccessSound(); // ✅ Sound effect
             setAnswerState('correct');
             setMyScore((prev) => prev + 2);
             toast.success('¡Correcto! +2 puntos', { icon: '✅' });
@@ -161,9 +239,10 @@ export default function MatchPage() {
               nextQuestion();
             }, 2000);
           } else if (data.result === 'incorrect') {
+            playErrorSound(); // ❌ Sound effect
             setAnswerState('wrong');
             setIsLocked(true); // I'm locked out now
-            toast.error('¡Incorrecto! Estás bloqueado para esta pregunta', { icon: '❌' });
+            toast.error('¡Incorrecto! Espera a que tu oponente responda', { icon: '❌' });
           } else if (data.result === 'already_submitted') {
             toast.warning('Ya respondiste esta pregunta');
           } else if (data.result === 'already_answered') {
@@ -179,18 +258,16 @@ export default function MatchPage() {
               nextQuestion();
             }, 2000);
           }
+          // ❗ IMPORTANT: Don't show when opponent answers incorrectly
+          // No notification for opponent's wrong answers
         }
         break;
       
       case 'opponent_wrong':
-        // Opponent answered wrong - I can still try if I haven't answered yet
-        setOpponentAnsweredWrong(true);
-        if (!isLocked) {
-          toast.info('Tu rival se equivocó. ¡Sigue intentando!', {
-            duration: 3000,
-            icon: '🎯'
-          });
-        }
+        // Opponent answered wrong - but DON'T tell the player!
+        // This is just for internal tracking if needed
+        // NO toast, NO notification - keep it secret
+        console.log('🤫 Opponent answered wrong (secret)');
         break;
       
       case 'time_up':

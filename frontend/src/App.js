@@ -192,11 +192,12 @@ function AppContent() {
   
   const handleMatchStarted = useCallback((data) => {
     // This is sent to BOTH players when match starts
-    console.log('🎮 Match started:', data.match_id);
+    console.log('🎮 Match started:', data.match_id, 'countdown_start:', data.countdown_start);
     if (data.match_id) {
-      // Store countdown start time in sessionStorage for sync
+      // Store countdown start time in localStorage for sync (more persistent than sessionStorage)
       if (data.countdown_start) {
-        sessionStorage.setItem(`countdown_${data.match_id}`, data.countdown_start);
+        localStorage.setItem(`countdown_${data.match_id}`, data.countdown_start);
+        console.log('💾 Stored countdown timestamp in localStorage');
       }
       navigate(`/match/${data.match_id}`);
     }
