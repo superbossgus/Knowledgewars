@@ -60,11 +60,37 @@ export default function MatchPage() {
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
       
-      // Start countdown before starting timer
-      startCountdown();
+      // Check if there's a synchronized countdown start time
+      const countdownStartStr = sessionStorage.getItem(`countdown_${matchId}`);
+      if (countdownStartStr) {
+        // Start synchronized countdown
+        startSynchronizedCountdown(countdownStartStr);
+        sessionStorage.removeItem(`countdown_${matchId}`); // Clean up
+      } else {
+        // Fallback: start countdown immediately (for rejoins or if WebSocket failed)
+        startCountdown();
+      }
     } catch (error) {
       toast.error('Error al cargar la partida');
       navigate('/home');
+    }
+  };
+
+  const startSynchronizedCountdown = (countdownStartStr) => {
+    const countdownStart = new Date(countdownStartStr);
+    const now = new Date();
+    const msUntilStart = countdownStart - now;
+    
+    console.log('⏰ Synchronized countdown will start in', msUntilStart, 'ms');
+    
+    if (msUntilStart > 0 && msUntilStart < 5000) {
+      // Wait until countdown start time, then start
+      setTimeout(() => {
+        startCountdown();
+      }, msUntilStart);
+    } else {
+      // If time passed or invalid, start immediately
+      startCountdown();
     }
   };
 

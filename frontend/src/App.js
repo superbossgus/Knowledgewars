@@ -194,6 +194,10 @@ function AppContent() {
     // This is sent to BOTH players when match starts
     console.log('🎮 Match started:', data.match_id);
     if (data.match_id) {
+      // Store countdown start time in sessionStorage for sync
+      if (data.countdown_start) {
+        sessionStorage.setItem(`countdown_${data.match_id}`, data.countdown_start);
+      }
       navigate(`/match/${data.match_id}`);
     }
   }, [navigate]);

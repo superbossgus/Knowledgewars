@@ -1400,12 +1400,14 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
         {"$inc": {"games_remaining": -1}}
     )
     
-    # Update match status
+    # Update match status with countdown start time
+    countdown_start = datetime.now(timezone.utc) + timedelta(seconds=1)  # Start in 1 second
     matches_col.update_one(
         {"_id": ObjectId(match_id)},
         {"$set": {
             "status": "active", 
-            "started_at": datetime.utcnow(),
+            "started_at": datetime.now(timezone.utc),
+            "countdown_start": countdown_start,
             "credits_deducted": True
         }}
     )
@@ -1414,13 +1416,15 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
     await manager.send_message(str(match["player_a_id"]), {
         "type": "challenge_accepted",
         "match_id": match_id,
-        "message": f"{current_user['display_name']} aceptó tu desafío!"
+        "message": f"{current_user['display_name']} aceptó tu desafío!",
+        "countdown_start": countdown_start.isoformat()
     })
     
-    # Notify both players to start the match
+    # Notify both players to start the match with synchronized countdown
     await manager.broadcast_to_match(match_id, {
         "type": "match_started",
-        "match_id": match_id
+        "match_id": match_id,
+        "countdown_start": countdown_start.isoformat()
     })
     
     return {"success": True, "match_id": match_id, "message": "¡Partida iniciada!"}
