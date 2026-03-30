@@ -233,16 +233,16 @@ export default function HomePage() {
               )}
             </div>
             <div className="text-4xl font-extrabold font-brand mb-3">
-              <span className={credits?.no_credits ? 'text-[hsl(0,100%,60%)]' : 'text-[hsl(45,92%,48%)]'} style={{ textShadow: '0 0 10px hsl(45 92% 48% / 0.5)' }}>
+              <span className={credits?.no_credits ? 'text-red-400' : 'text-white'} style={{ textShadow: credits?.no_credits ? '0 0 10px hsl(0 100% 60%)' : '0 0 10px hsl(220 100% 50% / 0.8)' }}>
                 {credits?.games_remaining || 0}
               </span>
             </div>
             {credits?.low_credits_warning && (
               <button
                 onClick={() => navigate('/store')}
-                className="w-full text-sm py-2 rounded-lg bg-[hsl(25,100%,50%,0.2)] text-[hsl(25,100%,50%)] font-bold hover:bg-[hsl(25,100%,50%,0.3)] transition-colors"
+                className="w-full text-sm py-2 rounded-lg bg-[hsl(25,100%,50%,0.2)] text-gray-900 dark:text-white font-bold hover:bg-[hsl(25,100%,50%,0.3)] transition-colors border border-[hsl(25,100%,50%,0.4)]"
               >
-                                {credits?.no_credits ? t('home.buy_games') : t('home.low_games')}
+                {credits?.no_credits ? t('home.buy_games') : t('home.low_games')}
               </button>
             )}
           </motion.div>

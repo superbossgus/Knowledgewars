@@ -8,7 +8,7 @@ import { AnswerOption } from '../components/custom/AnswerOption';
 import { ScoreBoard } from '../components/custom/ScoreBoard';
 import api from '../lib/api';
 import { toast } from 'sonner';
-import { Lightbulb, AlertCircle, Zap, Flag, X } from 'lucide-react';
+import { Lightbulb, AlertCircle, Zap, Flag, X, Home } from 'lucide-react';
 
 export default function MatchPage() {
   const { matchId } = useParams();
@@ -302,14 +302,15 @@ export default function MatchPage() {
       <div className="container mx-auto max-w-4xl">
         {/* Header with Scoreboard and Timer */}
         <div className="sticky top-2 z-30 flex items-center justify-between gap-3 bg-gradient-to-b from-black/60 to-transparent p-4 backdrop-blur-xl rounded-2xl mb-6 border-2 border-[hsl(220,100%,50%,0.3)]" style={{ boxShadow: '0 0 30px hsl(220 100% 50% / 0.2)' }}>
-          {/* Surrender Button (Top Left) */}
+          {/* Surrender/Exit Button (Top Left) */}
           <button
             onClick={handleSurrenderClick}
-            className="absolute top-4 left-4 p-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 transition-all group"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 transition-all group"
             data-testid="surrender-button"
-            title="Rendirse"
+            title="Salir / Rendirse"
           >
-            <Flag className="w-5 h-5 text-red-400 group-hover:text-red-300" />
+            <Home className="w-4 h-4 text-red-400 group-hover:text-red-300" />
+            <span className="text-xs font-semibold text-red-400 group-hover:text-red-300">Salir</span>
           </button>
           
           <ScoreBoard
@@ -483,13 +484,15 @@ export default function MatchPage() {
             style={{ boxShadow: '0 0 40px rgb(239 68 68 / 0.3)' }}
           >
             <div className="flex items-center gap-3 mb-4">
-              <Flag className="w-7 h-7 text-red-400" />
-              <h3 className="text-xl font-bold text-white font-brand">¿Rendirse?</h3>
+              <Home className="w-7 h-7 text-red-400" />
+              <h3 className="text-xl font-bold text-white font-brand">¿Salir al Home?</h3>
             </div>
             <p className="text-muted-foreground mb-6">
-              ¿Estás seguro que quieres <strong className="text-red-400">rendirte</strong> y regresar al menú de juego? 
+              Si sales al menú principal, <strong className="text-red-400">te rendirás</strong> y perderás la partida automáticamente.
               <br /><br />
-              Tu oponente ganará automáticamente por <strong className="text-red-400">rendición</strong> y tú perderás <strong className="text-red-400">-1 punto de ELO</strong>.
+              Tu oponente ganará por <strong className="text-red-400">rendición</strong> y tú perderás <strong className="text-red-400">-1 punto de ELO</strong>.
+              <br /><br />
+              ¿Estás seguro que quieres <strong className="text-red-400">abandonar</strong> la partida?
             </p>
             <div className="flex gap-3">
               <button
@@ -504,7 +507,7 @@ export default function MatchPage() {
                 className="flex-1 py-3 rounded-lg font-bold bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50 text-red-300 hover:text-red-200 transition-all"
                 data-testid="confirm-surrender-button"
               >
-                Sí, Rendirme
+                Sí, Salir y Rendirme
               </button>
             </div>
           </motion.div>
