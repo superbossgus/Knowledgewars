@@ -29,9 +29,12 @@ export default function MatchPage() {
   const [showHintDialog, setShowHintDialog] = useState(false);
   const [opponentAnsweredWrong, setOpponentAnsweredWrong] = useState(false);
   const [showSurrenderDialog, setShowSurrenderDialog] = useState(false);
+  const [showCountdown, setShowCountdown] = useState(true); // Show countdown at start
+  const [countdownNumber, setCountdownNumber] = useState(3); // 3, 2, 1
   
   const wsRef = useRef(null);
   const timerRef = useRef(null);
+  const countdownRef = useRef(null);
 
   useEffect(() => {
     loadMatch();
@@ -44,6 +47,9 @@ export default function MatchPage() {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+      }
     };
   }, [matchId]);
 
@@ -54,12 +60,31 @@ export default function MatchPage() {
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
       
-      // Start timer immediately when match loads (fallback if WebSocket fails)
-      startTimer();
+      // Start countdown before starting timer
+      startCountdown();
     } catch (error) {
       toast.error('Error al cargar la partida');
       navigate('/home');
     }
+  };
+
+  const startCountdown = () => {
+    setShowCountdown(true);
+    setCountdownNumber(3);
+    
+    let count = 3;
+    countdownRef.current = setInterval(() => {
+      count--;
+      if (count > 0) {
+        setCountdownNumber(count);
+      } else {
+        // Countdown finished
+        clearInterval(countdownRef.current);
+        setShowCountdown(false);
+        // Now start the actual game timer
+        startTimer();
+      }
+    }, 1000); // 1 second intervals
   };
 
   const connectWebSocket = () => {
@@ -96,7 +121,7 @@ export default function MatchPage() {
     switch (data.type) {
       case 'match_state':
         setMatch(data.match);
-        startTimer();
+        // Don't start countdown/timer here, it's handled by loadMatch
         break;
       
       case 'answer_result':
@@ -373,6 +398,45 @@ export default function MatchPage() {
           </div>
         )}
       </div>
+
+      {/* Countdown Overlay */}
+      <AnimatePresence>
+        {showCountdown && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md"
+          >
+            <motion.div
+              key={countdownNumber}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.5, opacity: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="text-center"
+            >
+              <div 
+                className="text-[200px] md:text-[300px] font-black text-white font-brand"
+                style={{ 
+                  textShadow: '0 0 80px hsl(220 100% 50%), 0 0 120px hsl(220 100% 50%), 0 0 160px hsl(220 100% 50%)',
+                  lineHeight: 1
+                }}
+              >
+                {countdownNumber}
+              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-2xl md:text-3xl font-bold text-[hsl(220,100%,60%)] mt-4"
+              >
+                ¡La partida está por comenzar!
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Hint Confirmation Dialog */}
       {showHintDialog && (
