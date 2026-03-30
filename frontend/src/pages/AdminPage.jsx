@@ -13,6 +13,7 @@ export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [adminSecret, setAdminSecret] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(true); // New: track initial verification
   const [stats, setStats] = useState(null);
   const [coupons, setCoupons] = useState([]);
   const [showCreateCoupon, setShowCreateCoupon] = useState(false);
@@ -47,20 +48,37 @@ export default function AdminPage() {
     const savedSecret = localStorage.getItem('admin_secret');
     if (savedSecret) {
       setAdminSecret(savedSecret);
-      verifyAdmin(savedSecret);
+      // Verify admin with timeout
+      const timeoutId = setTimeout(() => {
+        // If verification takes too long, clear the saved secret
+        localStorage.removeItem('admin_secret');
+        setAuthenticated(false);
+        setVerifying(false);
+      }, 10000); // 10 second timeout
+      
+      verifyAdmin(savedSecret).finally(() => {
+        clearTimeout(timeoutId);
+        setVerifying(false);
+      });
+    } else {
+      setVerifying(false);
     }
   }, []);
 
   const verifyAdmin = async (secret) => {
     try {
       const response = await api.get('/api/admin/stats', {
-        headers: { Authorization: `Bearer ${secret}` }
+        headers: { Authorization: `Bearer ${secret}` },
+        timeout: 8000 // 8 second timeout for the request
       });
       setStats(response.data);
       setAuthenticated(true);
-      loadCoupons();
+      await loadCoupons();
     } catch (error) {
+      console.error('Admin verification failed:', error);
       localStorage.removeItem('admin_secret');
+      setAuthenticated(false);
+      // Don't show error toast on auto-verify, only on manual login
     }
   };
 
@@ -177,6 +195,23 @@ export default function AdminPage() {
     setAuthenticated(false);
     setAdminSecret('');
   };
+
+  // Loading verification screen
+  if (verifying) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 hero-gradient">
+        <div className="noise-overlay" />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <Shield className="w-16 h-16 mx-auto mb-4 text-[hsl(220,100%,50%)] animate-pulse" />
+          <p className="text-white text-lg">Verificando acceso...</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   // Login Screen
   if (!authenticated) {
