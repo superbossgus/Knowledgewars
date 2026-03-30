@@ -42,7 +42,7 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
             <Swords className="w-6 h-6 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
             <div>
               <h3 className="text-xl font-extrabold text-white font-brand">¡DESAFÍO!</h3>
-              <p className="text-sm text-[hsl(220,100%,70%)]">Challenge received</p>
+              <p className="text-sm text-white/80">Challenge received</p>
             </div>
           </div>
           <button 
@@ -58,7 +58,7 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
             <span className={`fi fi-${challenge.player_a_country?.toLowerCase()} h-6 w-8 rounded shadow-lg`}></span>
             <div>
               <div className="font-bold text-white text-lg">{challenge.player_a_name}</div>
-              <div className="text-sm text-[hsl(45,92%,48%)] font-bold">📚 {challenge.topic}</div>
+              <div className="text-sm text-white font-bold">📚 {challenge.topic}</div>
             </div>
           </div>
         </div>

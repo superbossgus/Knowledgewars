@@ -117,6 +117,23 @@ class ConnectionManager:
             for user_id in [str(match["player_a_id"]), str(match["player_b_id"])]:
                 if user_id != exclude_user:
                     await self.send_message(user_id, message)
+    
+    def count_match_connections(self, match_id: str) -> int:
+        """Count how many players from this match are currently connected"""
+        match = matches_col.find_one({"_id": ObjectId(match_id)})
+        if not match:
+            return 0
+        
+        player_a_id = str(match["player_a_id"])
+        player_b_id = str(match["player_b_id"])
+        
+        count = 0
+        if player_a_id in self.active_connections:
+            count += 1
+        if player_b_id in self.active_connections:
+            count += 1
+        
+        return count
 
 manager = ConnectionManager()
 
@@ -1681,6 +1698,20 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
         return
     
     await manager.connect(user_id, websocket)
+    
+    # 🎯 CRITICAL: Check if BOTH players are now connected to this match
+    connections_count = manager.count_match_connections(match_id)
+    print(f"🔌 Match {match_id}: {connections_count}/2 players connected")
+    
+    if connections_count == 2:
+        # ✅ BOTH PLAYERS ARE CONNECTED - Start countdown NOW
+        print(f"✅✅✅ BOTH PLAYERS CONNECTED! Starting countdown for match {match_id}")
+        await asyncio.sleep(0.5)  # Small delay to ensure both WebSockets are ready
+        await manager.broadcast_to_match(match_id, {
+            "type": "start_countdown_now",
+            "match_id": match_id,
+            "message": "¡Ambos jugadores listos!"
+        })
     
     try:
         # Send initial match state (without correct answers)
