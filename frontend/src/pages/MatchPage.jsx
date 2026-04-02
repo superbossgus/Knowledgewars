@@ -36,6 +36,7 @@ export default function MatchPage() {
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
   const audioContextRef = useRef(null);
+  const countdownStartedRef = useRef(false); // Guard against double countdown
 
   // Initialize Web Audio API
   useEffect(() => {
@@ -109,20 +110,7 @@ export default function MatchPage() {
       setMyScore(response.data.match.score_a);
       setOpponentScore(response.data.match.score_b);
       
-      console.log('✅ Match loaded, waiting for synchronized countdown signal from server...');
-      
-      // DON'T start countdown here
-      // Wait for "start_countdown_now" message from server via WebSocket
-      // This ensures both players start at exactly the same time
-      
-      // Fallback: If WebSocket never sends signal (e.g., old match), start after 10s
-      setTimeout(() => {
-        if (showCountdown) {
-          console.log('⏰ Fallback: Starting countdown after 10s timeout');
-          startCountdown();
-        }
-      }, 10000);
-      
+      console.log('Match loaded. Waiting for game_start from server (both players must connect)...');
     } catch (error) {
       toast.error('Error al cargar la partida');
       navigate('/home');
@@ -130,6 +118,10 @@ export default function MatchPage() {
   };
 
   const startCountdown = () => {
+    // Guard: prevent double countdown triggers
+    if (countdownStartedRef.current) return;
+    countdownStartedRef.current = true;
+    
     setShowCountdown(true);
     setCountdownNumber(3);
     
@@ -139,13 +131,11 @@ export default function MatchPage() {
       if (count > 0) {
         setCountdownNumber(count);
       } else {
-        // Countdown finished
         clearInterval(countdownRef.current);
         setShowCountdown(false);
-        // Now start the actual game timer
         startTimer();
       }
-    }, 1000); // 1 second intervals
+    }, 1000);
   };
 
   const connectWebSocket = () => {
@@ -182,13 +172,11 @@ export default function MatchPage() {
     switch (data.type) {
       case 'match_state':
         setMatch(data.match);
-        // Don't start countdown here - wait for synchronized signal
         break;
       
-      case 'start_countdown_now':
-        // 🎯 SYNCHRONIZED COUNTDOWN SIGNAL FROM SERVER
-        // Both players receive this at the same time
-        console.log('🎯 Received synchronized countdown signal!');
+      case 'game_start':
+        // Server confirmed both players are connected — start countdown
+        console.log('Both players connected! Starting synchronized countdown.');
         startCountdown();
         break;
       

@@ -98,6 +98,98 @@
 
 
 
-#====================================================================================================
-# Testing Data - Main Agent and testing sub agent both should log testing data below this section
-#====================================================================================================
+user_problem_statement: "Knowledge Wars - Global mobile trivia app with real-time 1v1 PvP. Both players must start simultaneously (chess.com style)."
+
+backend:
+  - task: "WebSocket Connection Manager - Separate pools for notifications and match gameplay"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Rewritten ConnectionManager with separate notify_connections and match_connections pools. All send_message calls updated. Backend WS sync test passed."
+
+  - task: "Challenge notification delivery (instant via notification WS)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Challenge notification now goes through dedicated notification pool. Test confirmed instant delivery."
+
+  - task: "Synchronized game_start signal (chess.com pattern)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Match WS endpoint waits for both players to connect, then broadcasts game_start. Removed delayed countdown task from accept_match."
+
+frontend:
+  - task: "MatchPage - Countdown starts only on game_start from server"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/MatchPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Removed 10s fallback timer. Added countdownStartedRef guard. Listens for game_start instead of start_countdown_now."
+
+  - task: "App.js - Challenge notification popup contrast"
+    implemented: true
+    working: true
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "ChallengeNotification already has bg-gray-900/98 with white text. Verified contrast is correct."
+
+  - task: "App.js - Navigation on match accept (no double navigate)"
+    implemented: true
+    working: true
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "handleChallengeAccepted no longer navigates (removed duplicate). handleMatchStarted handles navigation for challenger. Accepter navigates directly from handleAcceptChallenge."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 5
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "WebSocket match synchronization (2-player e2e flow)"
+    - "Challenge notification delivery speed"
+    - "Challenge notification popup visibility"
+    - "MatchPage countdown starts correctly"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "CRITICAL FIX: Rewrote ConnectionManager to use separate pools for notification and match WebSockets (chess.com pattern). Previously, connecting to match WS would overwrite the notification WS since both used the same dict. Now they are independent. All 9 steps of the 2-player sync test pass. Frontend updated to listen for game_start event and has guard against double countdown."

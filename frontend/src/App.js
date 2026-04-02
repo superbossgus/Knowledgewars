@@ -184,21 +184,13 @@ function AppContent() {
       duration: 3000,
       icon: <Swords className="w-5 h-5 text-green-500" />
     });
-    // Navigate to the match immediately
-    if (data.match_id) {
-      navigate(`/match/${data.match_id}`);
-    }
-  }, [navigate]);
+    // Navigation is handled by handleMatchStarted
+  }, []);
   
   const handleMatchStarted = useCallback((data) => {
-    // This is sent to BOTH players when match starts
-    console.log('🎮 Match started:', data.match_id, 'countdown_start:', data.countdown_start);
+    // Both players receive this — navigate to match page
+    console.log('Match started:', data.match_id);
     if (data.match_id) {
-      // Store countdown start time in localStorage for sync (more persistent than sessionStorage)
-      if (data.countdown_start) {
-        localStorage.setItem(`countdown_${data.match_id}`, data.countdown_start);
-        console.log('💾 Stored countdown timestamp in localStorage');
-      }
       navigate(`/match/${data.match_id}`);
     }
   }, [navigate]);
@@ -249,14 +241,14 @@ function AppContent() {
     if (!pendingChallenge) return;
     
     try {
-      const response = await api.post(`/api/matches/${pendingChallenge.id}/accept`);
-      toast.success(response.data.message || '¡Desafío aceptado!');
+      await api.post(`/api/matches/${pendingChallenge.id}/accept`);
+      toast.success('¡Desafío aceptado! Entrando a la partida...');
+      const matchId = pendingChallenge.id;
       setPendingChallenge(null);
-      // Use navigate instead of window.location for smoother transition
-      navigate(`/match/${pendingChallenge.id}`);
+      navigate(`/match/${matchId}`);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Error al aceptar el desafío');
-      setPendingChallenge(null); // Clear the challenge if it failed (expired, etc.)
+      setPendingChallenge(null);
     }
   };
 

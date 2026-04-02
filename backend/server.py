@@ -89,51 +89,71 @@ EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
 STRIPE_API_KEY = os.getenv("STRIPE_API_KEY")
 question_generator = QuestionGenerator(EMERGENT_LLM_KEY, db)
 
-# WebSocket connection manager
+# WebSocket connection manager - SEPARATE POOLS for notifications and match gameplay
+# This prevents the match WS from overwriting the notification WS (chess.com pattern)
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
-        self.match_rooms: Dict[str, Dict] = {}
-    
-    async def connect(self, user_id: str, websocket: WebSocket):
+        # Pool 1: Notification connections (lobby, challenges, global alerts)
+        self.notify_connections: Dict[str, WebSocket] = {}
+        # Pool 2: Match gameplay connections, keyed by match_id -> {user_id: ws}
+        self.match_connections: Dict[str, Dict[str, WebSocket]] = {}
+
+    # --- Notification connections ---
+    async def connect_notify(self, user_id: str, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections[user_id] = websocket
-    
-    def disconnect(self, user_id: str):
-        if user_id in self.active_connections:
-            del self.active_connections[user_id]
-    
-    async def send_message(self, user_id: str, message: dict):
-        if user_id in self.active_connections:
+        self.notify_connections[user_id] = websocket
+
+    def disconnect_notify(self, user_id: str):
+        self.notify_connections.pop(user_id, None)
+
+    async def send_notification(self, user_id: str, message: dict):
+        ws = self.notify_connections.get(user_id)
+        if ws:
             try:
-                await self.active_connections[user_id].send_json(message)
-            except:
-                self.disconnect(user_id)
-    
+                await ws.send_json(message)
+                return True
+            except Exception:
+                self.disconnect_notify(user_id)
+        return False
+
+    # --- Match gameplay connections ---
+    async def connect_match(self, match_id: str, user_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if match_id not in self.match_connections:
+            self.match_connections[match_id] = {}
+        self.match_connections[match_id][user_id] = websocket
+
+    def disconnect_match(self, match_id: str, user_id: str):
+        if match_id in self.match_connections:
+            self.match_connections[match_id].pop(user_id, None)
+            if not self.match_connections[match_id]:
+                del self.match_connections[match_id]
+
+    async def send_match_message(self, match_id: str, user_id: str, message: dict):
+        room = self.match_connections.get(match_id, {})
+        ws = room.get(user_id)
+        if ws:
+            try:
+                await ws.send_json(message)
+                return True
+            except Exception:
+                self.disconnect_match(match_id, user_id)
+        return False
+
     async def broadcast_to_match(self, match_id: str, message: dict, exclude_user: Optional[str] = None):
-        """Broadcast message to all users in a match"""
-        match = matches_col.find_one({"_id": ObjectId(match_id)})
-        if match:
-            for user_id in [str(match["player_a_id"]), str(match["player_b_id"])]:
-                if user_id != exclude_user:
-                    await self.send_message(user_id, message)
-    
+        room = self.match_connections.get(match_id, {})
+        for uid, ws in list(room.items()):
+            if uid != exclude_user:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    self.disconnect_match(match_id, uid)
+
     def count_match_connections(self, match_id: str) -> int:
-        """Count how many players from this match are currently connected"""
-        match = matches_col.find_one({"_id": ObjectId(match_id)})
-        if not match:
-            return 0
-        
-        player_a_id = str(match["player_a_id"])
-        player_b_id = str(match["player_b_id"])
-        
-        count = 0
-        if player_a_id in self.active_connections:
-            count += 1
-        if player_b_id in self.active_connections:
-            count += 1
-        
-        return count
+        return len(self.match_connections.get(match_id, {}))
+
+    def cleanup_match(self, match_id: str):
+        self.match_connections.pop(match_id, None)
 
 manager = ConnectionManager()
 
@@ -1357,8 +1377,8 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
     result = matches_col.insert_one(match_doc)
     match_doc["_id"] = result.inserted_id
     
-    # Send challenge notification to opponent via WebSocket
-    await manager.send_message(match_data.opponent_id, {
+    # Send challenge notification to opponent via notification WebSocket
+    await manager.send_notification(match_data.opponent_id, {
         "type": "challenge_received",
         "match": serialize_doc(match_doc),
         "challenger": {
@@ -1418,45 +1438,36 @@ async def accept_match(match_id: str, current_user: dict = Depends(get_current_u
     )
     
     # Update match status
-    countdown_start = datetime.now(timezone.utc) + timedelta(seconds=3)  # Start in 3 seconds
     matches_col.update_one(
         {"_id": ObjectId(match_id)},
         {"$set": {
             "status": "active", 
             "started_at": datetime.now(timezone.utc),
-            "countdown_start": countdown_start,
             "credits_deducted": True
         }}
     )
     
-    # Notify challenger that match was accepted
-    await manager.send_message(str(match["player_a_id"]), {
+    # Notify challenger via notification WS that match was accepted
+    player_a_id = str(match["player_a_id"])
+    player_b_id = current_user["id"]
+    
+    await manager.send_notification(player_a_id, {
         "type": "challenge_accepted",
         "match_id": match_id,
-        "message": f"{current_user['display_name']} aceptó tu desafío!",
-        "countdown_start": countdown_start.isoformat()
+        "message": f"{current_user['display_name']} aceptó tu desafío!"
     })
     
-    # Notify both players to navigate to match
-    await manager.broadcast_to_match(match_id, {
-        "type": "match_started",
-        "match_id": match_id,
-        "countdown_start": countdown_start.isoformat()
-    })
-    
-    # CRITICAL: Wait 3 seconds, then send synchronized countdown start signal
-    # This ensures both players are on the page before countdown starts
-    async def send_countdown_signal():
-        await asyncio.sleep(3)
-        await manager.broadcast_to_match(match_id, {
-            "type": "start_countdown_now",
-            "match_id": match_id,
-            "message": "¡Iniciando countdown sincronizado!"
+    # Notify BOTH players to navigate to match via notification WS
+    for uid in [player_a_id, player_b_id]:
+        await manager.send_notification(uid, {
+            "type": "match_started",
+            "match_id": match_id
         })
-        print(f"✅ Sent synchronized countdown signal to both players in match {match_id}")
     
-    # Start the countdown signal task in background
-    asyncio.create_task(send_countdown_signal())
+    # The synchronized countdown is handled by the match WebSocket:
+    # When both players connect to /ws/match/{match_id}, the server
+    # detects 2/2 connections and broadcasts "game_start" simultaneously.
+    # No delayed task needed - this is the chess.com pattern.
     
     return {"success": True, "match_id": match_id, "message": "¡Partida iniciada!"}
 
@@ -1481,7 +1492,7 @@ async def reject_match(match_id: str, current_user: dict = Depends(get_current_u
     )
     
     # Notify challenger that match was rejected
-    await manager.send_message(str(match["player_a_id"]), {
+    await manager.send_notification(str(match["player_a_id"]), {
         "type": "challenge_rejected",
         "match_id": match_id,
         "message": f"{current_user['display_name']} rechazó tu desafío"
@@ -1511,7 +1522,7 @@ async def cancel_match(match_id: str, current_user: dict = Depends(get_current_u
     )
     
     # Notify opponent
-    await manager.send_message(str(match["player_b_id"]), {
+    await manager.send_notification(str(match["player_b_id"]), {
         "type": "challenge_cancelled",
         "match_id": match_id,
         "message": f"{current_user['display_name']} canceló el desafío"
@@ -1578,9 +1589,9 @@ async def surrender_match(match_id: str, current_user: dict = Depends(get_curren
         {"$set": {"elo_rating": loser_new_elo}}
     )
     
-    # Notify opponent that they won
+    # Notify opponent that they won (via match WS since both are in-game)
     opponent_id = str(match["player_b_id"]) if is_player_a else str(match["player_a_id"])
-    await manager.send_message(opponent_id, {
+    await manager.send_match_message(match_id, opponent_id, {
         "type": "opponent_surrendered",
         "match_id": match_id,
         "message": f"¡{current_user['display_name']} se rindió! Has ganado por rendición.",
@@ -1678,7 +1689,7 @@ async def get_match(match_id: str, current_user: dict = Depends(get_current_user
 
 @app.websocket("/ws/match/{match_id}")
 async def websocket_match(websocket: WebSocket, match_id: str, token: str):
-    """WebSocket endpoint for real-time match gameplay"""
+    """WebSocket endpoint for real-time match gameplay (chess.com pattern)"""
     # Authenticate
     payload = decode_access_token(token)
     if not payload:
@@ -1697,27 +1708,16 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
         await websocket.close(code=1008)
         return
     
-    await manager.connect(user_id, websocket)
+    # Connect to MATCH pool (separate from notification pool)
+    await manager.connect_match(match_id, user_id, websocket)
     
-    # 🎯 CRITICAL: Check if BOTH players are now connected to this match
+    # Check if BOTH players are now connected to this match room
     connections_count = manager.count_match_connections(match_id)
-    print(f"🔌 Match {match_id}: {connections_count}/2 players connected")
-    
-    if connections_count == 2:
-        # ✅ BOTH PLAYERS ARE CONNECTED - Start countdown NOW
-        print(f"✅✅✅ BOTH PLAYERS CONNECTED! Starting countdown for match {match_id}")
-        await asyncio.sleep(0.5)  # Small delay to ensure both WebSockets are ready
-        await manager.broadcast_to_match(match_id, {
-            "type": "start_countdown_now",
-            "match_id": match_id,
-            "message": "¡Ambos jugadores listos!"
-        })
+    print(f"🔌 Match {match_id}: {connections_count}/2 players connected (user: {user_id})")
     
     try:
         # Send initial match state (without correct answers)
         match_state = serialize_doc(match)
-        
-        # Remove correct answers from questions
         for q in match_state["questions"]:
             q.pop("correct_letter", None)
             q.pop("explanation_short", None)
@@ -1726,6 +1726,15 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
             "type": "match_state",
             "match": match_state
         })
+        
+        # CHESS.COM PATTERN: If both players are now connected, start the game
+        if connections_count == 2:
+            print(f"✅ BOTH PLAYERS CONNECTED! Broadcasting game_start for match {match_id}")
+            await asyncio.sleep(0.3)  # Tiny delay so both WS are fully ready
+            await manager.broadcast_to_match(match_id, {
+                "type": "game_start",
+                "match_id": match_id
+            })
         
         # Listen for messages
         while True:
@@ -1741,53 +1750,48 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
                 await handle_time_up(match_id, user_id, data)
     
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        manager.disconnect_match(match_id, user_id)
     except Exception as e:
         print(f"WebSocket error: {e}")
-        manager.disconnect(user_id)
+        manager.disconnect_match(match_id, user_id)
 
 
 @app.websocket("/ws/notify/{user_id}")
 async def websocket_notifications(websocket: WebSocket, user_id: str, token: str):
-    """WebSocket endpoint for real-time notifications (challenges, match updates, etc.)"""
-    # Authenticate
+    """WebSocket endpoint for notifications (challenges, match updates)"""
     payload = decode_access_token(token)
     if not payload:
         await websocket.close(code=1008, reason="Invalid token")
         return
     
-    # Verify user_id matches token
     if payload["user_id"] != user_id:
         await websocket.close(code=1008, reason="User ID mismatch")
         return
     
-    await manager.connect(user_id, websocket)
+    # Connect to NOTIFICATION pool (separate from match pool)
+    await manager.connect_notify(user_id, websocket)
     print(f"🔔 User {user_id} connected for notifications")
     
     try:
-        # Send connection confirmation
         await websocket.send_json({
             "type": "connected",
             "message": "Connected to notification service"
         })
         
-        # Keep connection alive and listen for any messages
         while True:
             try:
                 data = await websocket.receive_json()
-                # Handle any client-side messages if needed
                 if data.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
             except Exception:
-                # If receive fails, just continue (might be a disconnect)
                 break
     
     except WebSocketDisconnect:
         print(f"🔔 User {user_id} disconnected from notifications")
-        manager.disconnect(user_id)
+        manager.disconnect_notify(user_id)
     except Exception as e:
         print(f"Notification WebSocket error for user {user_id}: {e}")
-        manager.disconnect(user_id)
+        manager.disconnect_notify(user_id)
 
 
 async def handle_answer_submission(match_id: str, user_id: str, data: dict):
@@ -1824,7 +1828,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     
     if user_previous_answer:
         # Player already answered - prevent spam
-        await manager.send_message(user_id, {
+        await manager.send_match_message(match_id, user_id, {
             "type": "answer_result",
             "result": "already_submitted",
             "score_delta": 0
@@ -1840,7 +1844,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
     
     if correct_answer_event:
         # Someone already won this question
-        await manager.send_message(user_id, {
+        await manager.send_match_message(match_id, user_id, {
             "type": "answer_result",
             "result": "already_answered",
             "score_delta": 0
@@ -1895,7 +1899,7 @@ async def handle_answer_submission(match_id: str, user_id: str, data: dict):
         })
         
         # Notify ONLY the user who answered wrong (they are now locked)
-        await manager.send_message(user_id, {
+        await manager.send_match_message(match_id, user_id, {
             "type": "answer_result",
             "user_id": user_id,
             "result": "incorrect",
@@ -1966,7 +1970,7 @@ async def handle_hint_request(match_id: str, user_id: str, data: dict):
     )
     
     if existing:
-        await manager.send_message(user_id, {
+        await manager.send_match_message(match_id, user_id, {
             "type": "hint_result",
             "result": "already_requested"
         })
@@ -1992,7 +1996,7 @@ async def handle_hint_request(match_id: str, user_id: str, data: dict):
     
     # Send hint to user
     hint = match["questions"][question_index].get("hint", "")
-    await manager.send_message(user_id, {
+    await manager.send_match_message(match_id, user_id, {
         "type": "hint_result",
         "result": "success",
         "hint": hint,
@@ -2001,7 +2005,7 @@ async def handle_hint_request(match_id: str, user_id: str, data: dict):
     
     # Notify opponent
     opponent_id = str(match["player_b_id"]) if is_player_a else str(match["player_a_id"])
-    await manager.send_message(opponent_id, {
+    await manager.send_match_message(match_id, opponent_id, {
         "type": "opponent_hint",
         "question_index": question_index
     })
