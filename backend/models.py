@@ -86,6 +86,7 @@ class MatchCreate(BaseModel):
     opponent_id: str
     topic: str
     language: str
+    is_rematch: bool = False
 
 
 class MatchAnswer(BaseModel):

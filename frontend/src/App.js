@@ -24,7 +24,7 @@ function ProtectedRoute({ children }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
-function ChallengeNotification({ challenge, onAccept, onReject }) {
+function ChallengeNotification({ challenge, onAccept, onReject, isRematch }) {
   return (
     <motion.div
       initial={{ x: 400, opacity: 0 }}
@@ -33,16 +33,25 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
       className="fixed top-4 right-4 z-[100] max-w-md w-full"
     >
       <div 
-        className="bg-gray-900/98 backdrop-blur-xl border-2 border-[hsl(25,100%,50%)] rounded-2xl p-6 shadow-2xl"
-        style={{ boxShadow: '0 0 40px hsl(25 100% 50% / 0.5), 0 0 80px hsl(25 100% 50% / 0.25)' }}
+        className="bg-gray-900/98 backdrop-blur-xl border-2 rounded-2xl p-6 shadow-2xl"
+        style={{ 
+          borderColor: isRematch ? 'hsl(45, 92%, 48%)' : 'hsl(25, 100%, 50%)',
+          boxShadow: isRematch 
+            ? '0 0 40px hsl(45 92% 48% / 0.5), 0 0 80px hsl(45 92% 48% / 0.25)' 
+            : '0 0 40px hsl(25 100% 50% / 0.5), 0 0 80px hsl(25 100% 50% / 0.25)'
+        }}
       >
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <Shield className="w-8 h-8 text-[hsl(220,100%,60%)]" style={{ filter: 'drop-shadow(0 0 8px hsl(220 100% 50%))' }} />
-            <Swords className="w-6 h-6 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
+            <Swords className="w-6 h-6" style={{ color: isRematch ? 'hsl(45, 92%, 48%)' : 'hsl(25, 100%, 50%)', filter: `drop-shadow(0 0 6px ${isRematch ? 'hsl(45 92% 48%)' : 'hsl(25 100% 50%)'})` }} />
             <div>
-              <h3 className="text-xl font-extrabold text-white font-brand">¡DESAFÍO!</h3>
-              <p className="text-sm text-gray-300">Challenge received</p>
+              <h3 className="text-xl font-extrabold text-white font-brand">
+                {isRematch ? '¡REVANCHA!' : '¡DESAFÍO!'}
+              </h3>
+              <p className="text-sm text-gray-300">
+                {isRematch ? 'Quiere la revancha' : 'Challenge received'}
+              </p>
             </div>
           </div>
           <button 
@@ -67,12 +76,14 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
           <button
             onClick={onAccept}
             className="flex-1 btn-primary py-3 text-base font-bold"
+            data-testid="accept-challenge-button"
           >
-            ⚔️ ACEPTAR
+            {isRematch ? '⚔️ ACEPTAR REVANCHA' : '⚔️ ACEPTAR'}
           </button>
           <button
             onClick={onReject}
             className="flex-1 py-3 text-base rounded-lg font-bold bg-gray-700/80 hover:bg-gray-600/80 text-white border-2 border-gray-600 transition-all"
+            data-testid="reject-challenge-button"
           >
             Rechazar
           </button>
@@ -151,6 +162,7 @@ function AppContent() {
   const navigate = useNavigate();
   const { token, user } = useAuthStore();
   const [pendingChallenge, setPendingChallenge] = useState(null);
+  const [pendingIsRematch, setPendingIsRematch] = useState(false);
   const pendingChallengeRef = useRef(null);
   
   // Keep ref in sync with state
@@ -171,8 +183,10 @@ function AppContent() {
     const match = data.match;
     if (match && (!pendingChallengeRef.current || pendingChallengeRef.current.id !== match.id)) {
       setPendingChallenge(match);
+      setPendingIsRematch(!!data.is_rematch);
       playNotificationSound();
-      toast.info(`¡${data.challenger?.display_name || 'Alguien'} te ha retado!`, {
+      const label = data.is_rematch ? 'quiere revancha' : 'te ha retado';
+      toast.info(`¡${data.challenger?.display_name || 'Alguien'} ${label}!`, {
         duration: 5000,
         icon: <Swords className="w-5 h-5 text-[hsl(25,100%,50%)]" />
       });
@@ -216,6 +230,7 @@ function AppContent() {
           
           if (!pendingChallengeRef.current || pendingChallengeRef.current.id !== latestChallenge.id) {
             setPendingChallenge(latestChallenge);
+            setPendingIsRematch(!!latestChallenge.is_rematch);
             playNotificationSound();
           }
         } else {
@@ -272,6 +287,7 @@ function AppContent() {
             challenge={pendingChallenge}
             onAccept={handleAcceptChallenge}
             onReject={handleRejectChallenge}
+            isRematch={pendingIsRematch}
           />
         )}
       </AnimatePresence>

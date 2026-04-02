@@ -1384,7 +1384,8 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
         "winner_id": None,
         "elo_delta_a": 0,
         "elo_delta_b": 0,
-        "credits_deducted": False  # Track if credits were deducted
+        "credits_deducted": False,  # Track if credits were deducted
+        "is_rematch": match_data.is_rematch
     }
     
     result = matches_col.insert_one(match_doc)
@@ -1394,6 +1395,7 @@ async def create_match(match_data: MatchCreate, current_user: dict = Depends(get
     await manager.send_notification(match_data.opponent_id, {
         "type": "challenge_received",
         "match": serialize_doc(match_doc),
+        "is_rematch": match_data.is_rematch,
         "challenger": {
             "id": current_user["id"],
             "display_name": current_user["display_name"],
@@ -1611,12 +1613,23 @@ async def surrender_match(match_id: str, current_user: dict = Depends(get_curren
         "elo_gained": winner_elo_delta
     })
     
-    # Also send match_finished to close the match page
+    # Also send match_finished to close the match page (with full data for rematch)
+    elo_delta_a = loser_elo_delta if is_player_a else winner_elo_delta
+    elo_delta_b = winner_elo_delta if is_player_a else loser_elo_delta
     await manager.broadcast_to_match(match_id, {
         "type": "match_finished",
         "match_id": match_id,
         "winner_id": str(winner_id),
-        "win_reason": "surrender"
+        "win_reason": "surrender",
+        "score_a": match.get("score_a", 0),
+        "score_b": match.get("score_b", 0),
+        "elo_delta_a": elo_delta_a,
+        "elo_delta_b": elo_delta_b,
+        "player_a_id": str(match["player_a_id"]),
+        "player_b_id": str(match["player_b_id"]),
+        "player_a_name": match.get("player_a_name", "Jugador A"),
+        "player_b_name": match.get("player_b_name", "Jugador B"),
+        "topic": match.get("topic", "")
     })
     
     return {
@@ -1658,7 +1671,8 @@ async def get_pending_matches(current_user: dict = Depends(get_current_user)):
             "topic": 1,
             "language": 1,
             "created_at": 1,
-            "expires_at": 1
+            "expires_at": 1,
+            "is_rematch": 1
         }
     ).sort("created_at", DESCENDING).limit(10))
     
@@ -2129,13 +2143,19 @@ async def finish_match(match_id: str):
     # Notify both players
     await manager.broadcast_to_match(match_id, {
         "type": "match_finished",
+        "match_id": match_id,
         "winner_id": str(winner_id) if winner_id else None,
         "score_a": score_a,
         "score_b": score_b,
         "elo_delta_a": delta_a,
         "elo_delta_b": delta_b,
         "new_elo_a": new_elo_a,
-        "new_elo_b": new_elo_b
+        "new_elo_b": new_elo_b,
+        "player_a_id": str(match["player_a_id"]),
+        "player_b_id": str(match["player_b_id"]),
+        "player_a_name": user_a.get("display_name", "Jugador A"),
+        "player_b_name": user_b.get("display_name", "Jugador B"),
+        "topic": match.get("topic", "")
     })
 
 
