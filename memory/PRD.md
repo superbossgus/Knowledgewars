@@ -47,6 +47,7 @@ Global mobile trivia app "Knowledge Wars" — a real-time 1v1 PvP trivia game wi
 - [x] Web Audio API sound effects
 - [x] Surrender functionality
 - [x] Challenge notification popup (dark background, instant delivery)
+- [x] **Rematch feature**: After match ends, players can request rematch with same or new topic. Opponent receives golden "REVANCHA" notification and can accept/reject.
 
 ## Critical Fix Log (Feb 2026)
 - **WebSocket Connection Collision**: Rewrote `ConnectionManager` to use separate `notify_connections` and `match_connections` pools. Previously, connecting to match WS overwrote the notification WS. Now they are independent.
