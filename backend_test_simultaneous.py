@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 # Public backend URL
-BASE_URL = "https://knowledge-wars-pvp.preview.emergentagent.com"
+BASE_URL = "https://trivia-pvp-test.preview.emergentagent.com"
 WS_URL = "wss://knowledge-wars-pvp.preview.emergentagent.com"
 
 class SimultaneousMatchTester:

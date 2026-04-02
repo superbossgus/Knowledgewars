@@ -33,32 +33,32 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
       className="fixed top-4 right-4 z-[100] max-w-md w-full"
     >
       <div 
-        className="bg-card/95 backdrop-blur-xl border-2 border-[hsl(25,100%,50%)] rounded-2xl p-6 shadow-2xl"
+        className="bg-gray-900/98 backdrop-blur-xl border-2 border-[hsl(25,100%,50%)] rounded-2xl p-6 shadow-2xl"
         style={{ boxShadow: '0 0 40px hsl(25 100% 50% / 0.5), 0 0 80px hsl(25 100% 50% / 0.25)' }}
       >
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-[hsl(220,100%,50%)]" style={{ filter: 'drop-shadow(0 0 8px hsl(220 100% 50%))' }} />
+            <Shield className="w-8 h-8 text-[hsl(220,100%,60%)]" style={{ filter: 'drop-shadow(0 0 8px hsl(220 100% 50%))' }} />
             <Swords className="w-6 h-6 text-[hsl(25,100%,50%)]" style={{ filter: 'drop-shadow(0 0 6px hsl(25 100% 50%))' }} />
             <div>
               <h3 className="text-xl font-extrabold text-white font-brand">¡DESAFÍO!</h3>
-              <p className="text-sm text-white/80">Challenge received</p>
+              <p className="text-sm text-gray-300">Challenge received</p>
             </div>
           </div>
           <button 
             onClick={onReject}
-            className="text-white/60 hover:text-white transition-colors"
+            className="text-gray-400 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
-        <div className="mb-4 p-4 rounded-xl bg-muted/20 border-2 border-[hsl(220,100%,50%,0.3)]">
+        <div className="mb-4 p-4 rounded-xl bg-gray-800/80 border-2 border-[hsl(220,100%,50%,0.3)]">
           <div className="flex items-center gap-3 mb-2">
             <span className={`fi fi-${challenge.player_a_country?.toLowerCase()} h-6 w-8 rounded shadow-lg`}></span>
             <div>
               <div className="font-bold text-white text-lg">{challenge.player_a_name}</div>
-              <div className="text-sm text-white font-bold">📚 {challenge.topic}</div>
+              <div className="text-sm text-yellow-300 font-bold">📚 {challenge.topic}</div>
             </div>
           </div>
         </div>
@@ -72,7 +72,7 @@ function ChallengeNotification({ challenge, onAccept, onReject }) {
           </button>
           <button
             onClick={onReject}
-            className="flex-1 btn-secondary-glass py-3 text-base"
+            className="flex-1 py-3 text-base rounded-lg font-bold bg-gray-700/80 hover:bg-gray-600/80 text-white border-2 border-gray-600 transition-all"
           >
             Rechazar
           </button>

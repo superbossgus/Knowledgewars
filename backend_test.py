@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 # Public backend URL
-BASE_URL = "https://knowledge-wars-pvp.preview.emergentagent.com"
+BASE_URL = "https://trivia-pvp-test.preview.emergentagent.com"
 
 class KnowledgeWarsAPITester:
     def __init__(self):
@@ -309,7 +309,7 @@ class KnowledgeWarsAPITester:
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {self.token}',
-            'Origin': 'https://knowledge-wars-pvp.preview.emergentagent.com'
+            'Origin': 'https://trivia-pvp-test.preview.emergentagent.com'
         }
         
         try:
