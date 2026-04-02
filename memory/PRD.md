@@ -50,7 +50,7 @@ Global mobile trivia app "Knowledge Wars" — a real-time 1v1 PvP trivia game wi
 
 ## Critical Fix Log (Feb 2026)
 - **WebSocket Connection Collision**: Rewrote `ConnectionManager` to use separate `notify_connections` and `match_connections` pools. Previously, connecting to match WS overwrote the notification WS. Now they are independent.
-- **Synchronized Start**: Server broadcasts `game_start` only when both players are connected to the match WebSocket. No delayed tasks or fallback timers.
+- **Synchronized Start (player_ready protocol)**: Server waits for EXPLICIT `player_ready` signals from both players before broadcasting `game_start`. Client retries every 2s. This replaces the fragile connection-count approach.
 - **Challenge Notification Speed**: Now delivered instantly through dedicated notification pool.
 
 ## Remaining Backlog

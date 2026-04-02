@@ -36,7 +36,8 @@ export default function MatchPage() {
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
   const audioContextRef = useRef(null);
-  const countdownStartedRef = useRef(false); // Guard against double countdown
+  const countdownStartedRef = useRef(false);
+  const readyRetryRef = useRef(null);
 
   // Initialize Web Audio API
   useEffect(() => {
@@ -100,6 +101,9 @@ export default function MatchPage() {
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
       }
+      if (readyRetryRef.current) {
+        clearInterval(readyRetryRef.current);
+      }
     };
   }, [matchId]);
 
@@ -138,6 +142,13 @@ export default function MatchPage() {
     }, 1000);
   };
 
+  const sendPlayerReady = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'player_ready' }));
+      console.log('Sent player_ready signal');
+    }
+  };
+
   const connectWebSocket = () => {
     const token = localStorage.getItem('auth_token');
     const backendUrl = process.env.REACT_APP_BACKEND_URL;
@@ -149,7 +160,26 @@ export default function MatchPage() {
     const ws = new WebSocket(`${wsUrl}/ws/match/${matchId}?token=${token}`);
     
     ws.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('Match WebSocket connected');
+      // Send player_ready after a short delay (let match_state arrive first)
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'player_ready' }));
+          console.log('Sent player_ready signal');
+        }
+      }, 500);
+      
+      // Retry player_ready every 2 seconds if game hasn't started
+      readyRetryRef.current = setInterval(() => {
+        if (countdownStartedRef.current) {
+          clearInterval(readyRetryRef.current);
+          return;
+        }
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'player_ready' }));
+          console.log('Retrying player_ready...');
+        }
+      }, 2000);
     };
     
     ws.onmessage = (event) => {
@@ -162,7 +192,7 @@ export default function MatchPage() {
     };
     
     ws.onclose = () => {
-      console.log('WebSocket closed');
+      console.log('Match WebSocket closed');
     };
     
     wsRef.current = ws;
@@ -175,8 +205,11 @@ export default function MatchPage() {
         break;
       
       case 'game_start':
-        // Server confirmed both players are connected — start countdown
-        console.log('Both players connected! Starting synchronized countdown.');
+        // Server confirmed both players are ready — start countdown
+        console.log('Both players ready! Starting synchronized countdown.');
+        if (readyRetryRef.current) {
+          clearInterval(readyRetryRef.current);
+        }
         startCountdown();
         break;
       

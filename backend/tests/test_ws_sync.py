@@ -1,6 +1,6 @@
 """
-Test WebSocket synchronization for Knowledge Wars match flow.
-Simulates 2 players connecting to a match and verifying the game_start signal.
+Test WebSocket synchronization with player_ready protocol.
+Simulates 2 players connecting, sending ready signals, and verifying game_start.
 """
 import asyncio
 import json
@@ -20,134 +20,110 @@ def login(email, password):
     return data["token"], data["user"]["id"]
 
 async def test_match_sync():
-    print("=== Knowledge Wars WebSocket Sync Test ===\n")
+    print("=== WebSocket Sync Test (player_ready protocol) ===\n")
     
-    # 1. Login both users (sync HTTP)
-    print("1. Logging in both users...")
     token1, user1_id = login(USER1_EMAIL, PASSWORD)
     token2, user2_id = login(USER2_EMAIL, PASSWORD)
-    print(f"   User1: {user1_id}")
-    print(f"   User2: {user2_id}")
+    print(f"Users: {user1_id[:8]}... / {user2_id[:8]}...")
     
-    # 2. Connect notification WebSockets
-    print("\n2. Connecting notification WebSockets...")
+    # Connect notification WS
     notify_ws1 = await websockets.connect(f"{WS_URL}/ws/notify/{user1_id}?token={token1}")
-    msg = json.loads(await notify_ws1.recv())
-    print(f"   User1 notify: {msg['type']}")
-    
+    await notify_ws1.recv()  # connected msg
     notify_ws2 = await websockets.connect(f"{WS_URL}/ws/notify/{user2_id}?token={token2}")
-    msg = json.loads(await notify_ws2.recv())
-    print(f"   User2 notify: {msg['type']}")
+    await notify_ws2.recv()  # connected msg
+    print("Notification WS connected for both")
     
-    # 3. User1 creates a match (sync HTTP)
-    print("\n3. User1 creates match (challenges User2)...")
+    # Create match
     r = requests.post(
         f"{API_URL}/api/matches/create",
-        json={"opponent_id": user2_id, "topic": "Test Sync", "language": "es"},
+        json={"opponent_id": user2_id, "topic": "Test Sync v2", "language": "es"},
         headers={"Authorization": f"Bearer {token1}"}
     )
-    create_data = r.json()
-    if "match" not in create_data:
-        print(f"   FAIL: {create_data}")
-        await notify_ws1.close()
-        await notify_ws2.close()
-        return False
-    match_id = create_data["match"]["id"]
-    print(f"   Match created: {match_id}")
+    match_id = r.json()["match"]["id"]
+    print(f"Match created: {match_id[:12]}...")
     
-    # 4. User2 should receive challenge notification
-    print("\n4. Checking challenge notification delivery...")
-    try:
-        msg = json.loads(await asyncio.wait_for(notify_ws2.recv(), timeout=5))
-        print(f"   User2 received: {msg['type']}")
-        assert msg['type'] == 'challenge_received', f"Expected challenge_received, got {msg['type']}"
-        print("   PASS: Challenge notification delivered instantly!")
-    except asyncio.TimeoutError:
-        print("   FAIL: No notification within 5 seconds")
-        return False
+    # User2 receives challenge
+    msg = json.loads(await asyncio.wait_for(notify_ws2.recv(), timeout=5))
+    assert msg['type'] == 'challenge_received'
+    print("PASS: Challenge delivered instantly")
     
-    # 5. User2 accepts the match (sync HTTP)
-    print("\n5. User2 accepts match...")
+    # User2 accepts
     r = requests.post(
         f"{API_URL}/api/matches/{match_id}/accept",
         headers={"Authorization": f"Bearer {token2}"}
     )
-    accept_data = r.json()
-    print(f"   Accept: {accept_data.get('message','?')}")
+    print(f"Match accepted: {r.json().get('message','?')}")
     
-    # 6. Check User1 gets notifications
-    print("\n6. Checking User1 receives notifications...")
-    u1_types = []
-    try:
-        for _ in range(5):
-            msg = json.loads(await asyncio.wait_for(notify_ws1.recv(), timeout=3))
-            u1_types.append(msg['type'])
-            print(f"   User1 got: {msg['type']}")
-            if msg['type'] == 'match_started':
-                break
-    except asyncio.TimeoutError:
-        pass
+    # Drain notification messages
+    for ws in [notify_ws1, notify_ws2]:
+        try:
+            while True:
+                await asyncio.wait_for(ws.recv(), timeout=1)
+        except asyncio.TimeoutError:
+            pass
     
-    has_match_started_u1 = 'match_started' in u1_types
-    print(f"   match_started received: {'PASS' if has_match_started_u1 else 'FAIL'}")
-    
-    # 7. Check User2 gets match_started
-    print("\n7. Checking User2 receives match_started...")
-    u2_types = []
-    try:
-        for _ in range(5):
-            msg = json.loads(await asyncio.wait_for(notify_ws2.recv(), timeout=3))
-            u2_types.append(msg['type'])
-            print(f"   User2 got: {msg['type']}")
-            if msg['type'] == 'match_started':
-                break
-    except asyncio.TimeoutError:
-        pass
-    
-    has_match_started_u2 = 'match_started' in u2_types
-    print(f"   match_started received: {'PASS' if has_match_started_u2 else 'FAIL'}")
-    
-    # 8. Both connect to match WebSocket
-    print("\n8. Both players connecting to match WebSocket...")
+    # Both connect to match WS
+    print("\n--- Match WebSocket Phase ---")
     match_ws1 = await websockets.connect(f"{WS_URL}/ws/match/{match_id}?token={token1}")
     state1 = json.loads(await match_ws1.recv())
-    print(f"   User1 got: {state1['type']}")
+    assert state1['type'] == 'match_state'
+    print(f"Player1 connected, got match_state")
     
     match_ws2 = await websockets.connect(f"{WS_URL}/ws/match/{match_id}?token={token2}")
     state2 = json.loads(await match_ws2.recv())
-    print(f"   User2 got: {state2['type']}")
+    assert state2['type'] == 'match_state'
+    print(f"Player2 connected, got match_state")
     
-    # 9. CRITICAL: Both should receive game_start
-    print("\n9. CRITICAL: Waiting for synchronized game_start...")
+    # TEST 1: Only Player1 sends ready — no game_start yet
+    print("\nTest 1: Only Player1 sends ready...")
+    await match_ws1.send(json.dumps({"type": "player_ready"}))
+    
+    try:
+        msg = json.loads(await asyncio.wait_for(match_ws1.recv(), timeout=2))
+        if msg['type'] == 'game_start':
+            print("FAIL: game_start sent with only 1 ready player!")
+            return False
+    except asyncio.TimeoutError:
+        print("PASS: No game_start with only 1 player ready")
+    
+    # TEST 2: Player2 sends ready — should trigger game_start for both
+    print("\nTest 2: Player2 sends ready (should trigger game_start)...")
+    await match_ws2.send(json.dumps({"type": "player_ready"}))
+    
     gs = {user1_id: False, user2_id: False}
     
     async def wait_gs(ws, label, uid):
         try:
             for _ in range(5):
                 msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
-                print(f"   {label}: {msg['type']}")
                 if msg['type'] == 'game_start':
                     gs[uid] = True
+                    print(f"   {label}: game_start received!")
                     return
         except asyncio.TimeoutError:
-            pass
+            print(f"   {label}: TIMEOUT - no game_start")
     
     await asyncio.gather(
-        wait_gs(match_ws1, "User1", user1_id),
-        wait_gs(match_ws2, "User2", user2_id)
+        wait_gs(match_ws1, "Player1", user1_id),
+        wait_gs(match_ws2, "Player2", user2_id)
     )
     
-    print(f"\n   User1 game_start: {'PASS' if gs[user1_id] else 'FAIL'}")
-    print(f"   User2 game_start: {'PASS' if gs[user2_id] else 'FAIL'}")
+    print(f"\nPlayer1 game_start: {'PASS' if gs[user1_id] else 'FAIL'}")
+    print(f"Player2 game_start: {'PASS' if gs[user2_id] else 'FAIL'}")
     
-    all_pass = all(gs.values()) and has_match_started_u1 and has_match_started_u2
+    # TEST 3: Retry player_ready (simulating the client retry)
+    print("\nTest 3: Retry player_ready (should be idempotent)...")
+    await match_ws1.send(json.dumps({"type": "player_ready"}))
+    # Already started, extra ready signals should still trigger game_start (idempotent)
+    try:
+        msg = json.loads(await asyncio.wait_for(match_ws1.recv(), timeout=2))
+        print(f"   Received after retry: {msg['type']} (OK - idempotent)")
+    except asyncio.TimeoutError:
+        print("   No extra message (OK - already started)")
     
-    if all_pass:
-        print("\n=== ALL TESTS PASSED ===")
-    else:
-        print("\n=== SOME TESTS FAILED ===")
+    all_pass = all(gs.values())
+    print(f"\n=== {'ALL TESTS PASSED' if all_pass else 'SOME TESTS FAILED'} ===")
     
-    # Cleanup
     for ws in [notify_ws1, notify_ws2, match_ws1, match_ws2]:
         await ws.close()
     

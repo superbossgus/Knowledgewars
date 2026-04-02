@@ -97,6 +97,8 @@ class ConnectionManager:
         self.notify_connections: Dict[str, WebSocket] = {}
         # Pool 2: Match gameplay connections, keyed by match_id -> {user_id: ws}
         self.match_connections: Dict[str, Dict[str, WebSocket]] = {}
+        # Pool 3: Ready players per match (explicit ready signals from clients)
+        self.match_ready: Dict[str, set] = {}
 
     # --- Notification connections ---
     async def connect_notify(self, user_id: str, websocket: WebSocket):
@@ -128,6 +130,9 @@ class ConnectionManager:
             self.match_connections[match_id].pop(user_id, None)
             if not self.match_connections[match_id]:
                 del self.match_connections[match_id]
+        # Also remove from ready set
+        if match_id in self.match_ready:
+            self.match_ready[match_id].discard(user_id)
 
     async def send_match_message(self, match_id: str, user_id: str, message: dict):
         room = self.match_connections.get(match_id, {})
@@ -152,8 +157,16 @@ class ConnectionManager:
     def count_match_connections(self, match_id: str) -> int:
         return len(self.match_connections.get(match_id, {}))
 
+    def mark_player_ready(self, match_id: str, user_id: str) -> int:
+        """Mark a player as ready. Returns count of ready players."""
+        if match_id not in self.match_ready:
+            self.match_ready[match_id] = set()
+        self.match_ready[match_id].add(user_id)
+        return len(self.match_ready[match_id])
+
     def cleanup_match(self, match_id: str):
         self.match_connections.pop(match_id, None)
+        self.match_ready.pop(match_id, None)
 
 manager = ConnectionManager()
 
@@ -1689,8 +1702,14 @@ async def get_match(match_id: str, current_user: dict = Depends(get_current_user
 
 @app.websocket("/ws/match/{match_id}")
 async def websocket_match(websocket: WebSocket, match_id: str, token: str):
-    """WebSocket endpoint for real-time match gameplay (chess.com pattern)"""
-    # Authenticate
+    """WebSocket endpoint for real-time match gameplay (chess.com pattern)
+    
+    Flow:
+    1. Player connects → receives match_state
+    2. Player sends player_ready
+    3. Server tracks ready players → when 2/2 ready, broadcasts game_start
+    4. Both clients start countdown simultaneously
+    """
     payload = decode_access_token(token)
     if not payload:
         await websocket.close(code=1008)
@@ -1698,22 +1717,20 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
     
     user_id = payload["user_id"]
     
-    # Verify match exists and user is participant
     match = matches_col.find_one({"_id": ObjectId(match_id)})
     if not match:
         await websocket.close(code=1008)
         return
     
-    if str(match["player_a_id"]) != user_id and str(match["player_b_id"]) != user_id:
+    player_a_id = str(match["player_a_id"])
+    player_b_id = str(match["player_b_id"])
+    
+    if user_id != player_a_id and user_id != player_b_id:
         await websocket.close(code=1008)
         return
     
-    # Connect to MATCH pool (separate from notification pool)
     await manager.connect_match(match_id, user_id, websocket)
-    
-    # Check if BOTH players are now connected to this match room
-    connections_count = manager.count_match_connections(match_id)
-    print(f"🔌 Match {match_id}: {connections_count}/2 players connected (user: {user_id})")
+    print(f"🔌 Match {match_id}: player {user_id} connected ({manager.count_match_connections(match_id)}/2)")
     
     try:
         # Send initial match state (without correct answers)
@@ -1727,20 +1744,24 @@ async def websocket_match(websocket: WebSocket, match_id: str, token: str):
             "match": match_state
         })
         
-        # CHESS.COM PATTERN: If both players are now connected, start the game
-        if connections_count == 2:
-            print(f"✅ BOTH PLAYERS CONNECTED! Broadcasting game_start for match {match_id}")
-            await asyncio.sleep(0.3)  # Tiny delay so both WS are fully ready
-            await manager.broadcast_to_match(match_id, {
-                "type": "game_start",
-                "match_id": match_id
-            })
-        
         # Listen for messages
         while True:
             data = await websocket.receive_json()
             
-            if data["type"] == "submit_answer":
+            if data["type"] == "player_ready":
+                # Client confirms it's ready to play
+                ready_count = manager.mark_player_ready(match_id, user_id)
+                print(f"✅ Match {match_id}: player {user_id} ready ({ready_count}/2)")
+                
+                if ready_count >= 2:
+                    # BOTH PLAYERS READY — broadcast game_start to all
+                    print(f"🎮 Match {match_id}: BOTH READY! Broadcasting game_start")
+                    await manager.broadcast_to_match(match_id, {
+                        "type": "game_start",
+                        "match_id": match_id
+                    })
+            
+            elif data["type"] == "submit_answer":
                 await handle_answer_submission(match_id, user_id, data)
             
             elif data["type"] == "request_hint":
