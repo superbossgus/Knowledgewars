@@ -85,9 +85,9 @@ password_resets_col.create_index("expires_at")
 coupons_col.create_index("code", unique=True)
 
 # Services
-EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 STRIPE_API_KEY = os.getenv("STRIPE_API_KEY")
-question_generator = QuestionGenerator(EMERGENT_LLM_KEY, db)
+question_generator = QuestionGenerator(ANTHROPIC_API_KEY, db)
 
 # WebSocket connection manager - SEPARATE POOLS for notifications and match gameplay
 # This prevents the match WS from overwriting the notification WS (chess.com pattern)

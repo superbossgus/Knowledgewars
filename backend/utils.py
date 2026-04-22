@@ -215,7 +215,7 @@ class ELOCalculator:
 
 
 class QuestionGenerator:
-    """OpenAI question generator with caching"""
+    """Anthropic Claude question generator with caching"""
     
     SYSTEM_PROMPT = """You are a trivia question generator. Output ONLY valid JSON. No markdown. 
 Ensure exactly one correct option. Avoid ambiguity and time-sensitive facts."""
@@ -223,7 +223,7 @@ Ensure exactly one correct option. Avoid ambiguity and time-sensitive facts."""
     def __init__(self, api_key: str, db):
         self.api_key = api_key
         self.db = db
-        self.prompt_version = "v2"  # Updated to force regeneration with correct language hints
+        self.prompt_version = "v3"  # Updated for Anthropic Claude
     
     def _normalize_topic(self, topic: str) -> str:
         """Normalize topic for caching"""
@@ -247,7 +247,7 @@ Return ONLY valid JSON (no markdown):
     
     async def generate_questions(self, topic: str, language: str) -> Dict[str, Any]:
         """Generate or retrieve cached question set"""
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        import anthropic
         
         topic_normalized = self._normalize_topic(topic)
         
@@ -266,23 +266,26 @@ Return ONLY valid JSON (no markdown):
             )
             return cached['questions_json']
         
-        # Generate new set
-        chat = LlmChat(
-            api_key=self.api_key,
-            session_id=f"qgen_{topic_normalized}_{language}_{datetime.utcnow().timestamp()}",
-            system_message=self.SYSTEM_PROMPT
-        )
-        chat.with_model("openai", "gpt-4o-mini")
+        # Generate new set using Anthropic Claude
+        client = anthropic.Anthropic(api_key=self.api_key)
         
         prompt = self._build_prompt(topic, language)
-        response = await chat.send_message(UserMessage(text=prompt))
+        message = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=2048,
+            system=self.SYSTEM_PROMPT,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
         
         # Parse and validate
-        response_text = response.strip()
+        response_text = message.content[0].text.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("```")[1]
             if response_text.startswith("json"):
                 response_text = response_text[4:]
+        response_text = response_text.rstrip("```")
         
         data = json.loads(response_text)
         
