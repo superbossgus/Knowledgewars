@@ -19,8 +19,8 @@ sys.path.insert(0, '/app/backend')
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-from emergentintegrations.payments.stripe.checkout import (
+from llm_chat import LlmChat, UserMessage
+from stripe_handler import (
     StripeCheckout,
     CheckoutSessionRequest,
     CheckoutSessionResponse,

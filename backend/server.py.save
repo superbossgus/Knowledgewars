@@ -1,4 +1,4 @@
-"""
+
 Knowledge Wars - Main Server
 FastAPI backend with WebSocket support for real-time duels
 """
@@ -28,7 +28,7 @@ from utils import (
     hash_password, verify_password, create_access_token, decode_access_token,
     serialize_doc, ELOCalculator, QuestionGenerator
 )
-from stripe_handler import (
+from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse
 )
 
@@ -85,9 +85,9 @@ password_resets_col.create_index("expires_at")
 coupons_col.create_index("code", unique=True)
 
 # Services
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY")
 STRIPE_API_KEY = os.getenv("STRIPE_API_KEY")
-question_generator = QuestionGenerator(ANTHROPIC_API_KEY, db)
+question_generator = QuestionGenerator(EMERGENT_LLM_KEY, db)
 
 # WebSocket connection manager - SEPARATE POOLS for notifications and match gameplay
 # This prevents the match WS from overwriting the notification WS (chess.com pattern)
