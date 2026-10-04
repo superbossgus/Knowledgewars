@@ -160,7 +160,7 @@
   "test_accounts_status": {
     "test1@knowledgewars.app": "✅ Login successful, User ID: 69b8afa2776ad6a17498473d",
     "test2@knowledgewars.app": "✅ Login successful, User ID: 69b8afa2776ad6a17498473e",
-    "credentials": "Both accounts use password: test123"
+    "credentials": "Both accounts use a shared test password (not recorded here)"
   },
   
   "critical_findings": {

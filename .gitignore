@@ -80,7 +80,6 @@ agenthub/agents/youtube/db
 android-sdk/ frontend/node_modules/.cache/default-development/3.pack
 frontend/node_modules/.cache/default-development/3.pack
 frontend/node_modules/.cache/default-development/0.pack
--e 
 # Environment and credential files
 .env
 .env.*
@@ -89,3 +88,13 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Templates are the one env file that must stay tracked
+!.env.example
+!**/.env.example
+
+# Editor and shell backups - this is how backend/server.py.save leaked a secret
+*.save
+*.bak
+*.orig
+*~

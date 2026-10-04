@@ -5,6 +5,7 @@ FastAPI backend with WebSocket support for real-time duels
 
 import os
 import asyncio
+import hmac
 import httpx
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -36,9 +37,21 @@ from stripe_handler import (
 app = FastAPI(title="Knowledge Wars API")
 
 # CORS
+# Allowed origins come from CORS_ORIGINS (comma-separated). The API sends
+# credentials, so a wildcard is never acceptable here: it would expose every
+# authenticated route, including /api/admin/*, to any origin on the internet.
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+if not CORS_ORIGINS:
+    raise ValueError(
+        "CORS_ORIGINS environment variable is required "
+        "(comma-separated origins, e.g. https://knowledgewars.app,https://www.knowledgewars.app)"
+    )
+if "*" in CORS_ORIGINS:
+    raise ValueError("CORS_ORIGINS cannot be '*' because the API sends credentials")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,6 +59,8 @@ app.add_middleware(
 
 # MongoDB connection
 MONGO_URL = os.getenv("MONGO_URL")
+if not MONGO_URL:
+    raise ValueError("MONGO_URL environment variable is required")
 DB_NAME = os.getenv("DB_NAME")
 if not DB_NAME:
     raise ValueError("DB_NAME environment variable is required")
@@ -917,17 +932,19 @@ async def use_game_credit(current_user: dict = Depends(get_current_user)):
 # ADMIN ENDPOINTS (Coupon Management)
 # ============================================================================
 
-ADMIN_SECRET = "knowledge-wars-admin-2024"  # Fixed secret, not using environment variables
+ADMIN_SECRET = os.getenv("ADMIN_SECRET")
+if not ADMIN_SECRET:
+    raise ValueError("ADMIN_SECRET environment variable is required")
 
 async def verify_admin(authorization: Optional[str] = Header(None)):
     """Verify admin access"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Admin authentication required")
-    
+
     token = authorization.replace("Bearer ", "")
-    if token != ADMIN_SECRET:
+    if not hmac.compare_digest(token, ADMIN_SECRET):
         raise HTTPException(status_code=403, detail="Invalid admin credentials")
-    
+
     return True
 
 @app.post("/api/admin/coupons/create")
