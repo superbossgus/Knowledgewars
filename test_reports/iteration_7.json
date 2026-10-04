@@ -57,9 +57,9 @@
   },
   
   "test_credentials": {
-    "user1": "test1@knowledgewars.app / test123",
-    "user2": "test2@knowledgewars.app / test123",
-    "admin": "Bearer knowledge-wars-admin-2024"
+    "user1": "test1@knowledgewars.app / <redacted>",
+    "user2": "test2@knowledgewars.app / <redacted>",
+    "admin": "<redacted: see ADMIN_SECRET env var>"
   },
   
   "seed_data_creation": "None - used existing test users",
