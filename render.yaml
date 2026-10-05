@@ -1,0 +1,98 @@
+# Blueprint de Render para Knowledge Wars.
+#
+# Reconstruye los dos servicios en capa gratuita. Ningun valor secreto vive en
+# este archivo: todo lo marcado con `sync: false` lo pide Render al aplicar el
+# blueprint y se queda guardado solo del lado de Render.
+#
+# Como se usa (Dashboard de Render -> Blueprints -> New Blueprint Instance,
+# apuntando a este repo):
+#
+#   1. Render lee este archivo y pide los cinco valores con `sync: false`.
+#   2. Se pegan ahi. Sin ellos el backend NO arranca, y eso es a proposito:
+#      los guards de arranque son la mitad de codigo de BOS-136.
+#   3. Hasta despues de que las variables existan se mergea el PR #1.
+#
+# Orden que importa, porque hay una dependencia circular aparente:
+#   a. Aplicar el blueprint. El static site obtiene su URL publica.
+#   b. Poner esa URL en CORS_ORIGINS del backend.
+#   c. Poner la URL del backend en REACT_APP_BACKEND_URL del static site.
+#   d. Volver a desplegar el static site (el valor se compila en el bundle).
+#
+# `plan: free` en el web service y un static site son nivel 0. El web service
+# gratuito se duerme con la inactividad: la primera peticion despues de un rato
+# tarda ~50 s en responder. Eso basta para una demo, no para un evento en vivo.
+
+services:
+  - type: web
+    name: knowledgewars-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+
+      # --- Requeridas: el backend no levanta sin ellas (guards de arranque) ---
+
+      # Llave HS256 con la que se firman las sesiones. Generar nueva:
+      #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+      - key: JWT_SECRET
+        sync: false
+
+      # Unico control de /api/admin/*. Generar igual que la anterior.
+      - key: ADMIN_SECRET
+        sync: false
+
+      # Cadena de conexion del cluster M0 nuevo de Atlas.
+      # NO reutilizar la credencial filtrada ni su patron: la anterior tenia la
+      # contrasena identica al usuario.
+      - key: MONGO_URL
+        sync: false
+
+      - key: DB_NAME
+        sync: false
+
+      # Origenes del frontend, separados por coma. Un "*" se rechaza al
+      # arrancar: con allow_credentials activo, el comodin exponia todas las
+      # rutas autenticadas, la API de admin incluida.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # --- Requerida para que arranque una partida ---
+
+      # Sin esto, POST /api/matches/create falla al generar las preguntas.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # --- Opcionales ---
+
+      # Modelo del generador de preguntas. Por omision claude-sonnet-5.
+      # Alternativa mas barata: claude-haiku-4-5.
+      - key: QUESTION_MODEL
+        sync: false
+
+  - type: web
+    name: knowledgewars-frontend
+    runtime: static
+    rootDir: frontend
+    # Ojo: el repo no tiene yarn.lock ni package-lock.json, asi que esta
+    # instalacion no es reproducible entre builds. No se puede usar
+    # --frozen-lockfile todavia. Generar y commitear un lock file es una tarea
+    # aparte y conviene hacerla antes de montar un evento pagado encima.
+    buildCommand: yarn install && yarn build
+    staticPublishPath: build
+    envVars:
+      # URL publica del web service de arriba. Create React App compila este
+      # valor en el bundle, asi que cambiarlo exige un redeploy del static site,
+      # no solo reiniciarlo.
+      - key: REACT_APP_BACKEND_URL
+        sync: false
+    routes:
+      # SPA: cualquier ruta desconocida la resuelve el router del cliente.
+      - type: rewrite
+        source: /*
+        destination: /index.html
