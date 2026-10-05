@@ -4,6 +4,7 @@ Knowledge Wars - Utility Functions
 
 import os
 import json
+import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
 from bson import ObjectId
@@ -214,17 +215,45 @@ class ELOCalculator:
         }
 
 
+class QuestionGenerationError(RuntimeError):
+    """
+    Falla al generar un set de preguntas.
+
+    server.py convierte cualquier excepcion de generate_questions en un
+    HTTPException 500, asi que el mensaje de esta excepcion es lo unico que
+    llega a los logs: tiene que decir *por que* fallo, no solo que fallo.
+    """
+
+
 class QuestionGenerator:
     """Anthropic Claude question generator with caching"""
-    
-    SYSTEM_PROMPT = """You are a trivia question generator. Output ONLY valid JSON. No markdown. 
+
+    SYSTEM_PROMPT = """You are a trivia question generator. Output ONLY valid JSON. No markdown.
 Ensure exactly one correct option. Avoid ambiguity and time-sensitive facts."""
-    
-    def __init__(self, api_key: str, db):
+
+    # claude-3-5-sonnet-20241022 se retiro el 2025-10-28 y devolvia 404, lo que
+    # rompia POST /api/matches/create. El reemplazo directo es claude-sonnet-5.
+    # Configurable por entorno para poder bajar a claude-haiku-4-5 sin redeploy
+    # de codigo si el costo por tema nuevo llega a importar.
+    DEFAULT_MODEL = "claude-sonnet-5"
+
+    # Un set son 10 preguntas x 6 opciones + pista + explicacion. Con el
+    # tokenizador nuevo (~30% mas tokens que el modelo retirado) 2048 truncaba
+    # la respuesta a la mitad y json.loads moria con "Unterminated string".
+    MAX_TOKENS = 8192
+
+    EXPECTED_QUESTIONS = 10
+    OPTION_LETTERS = ("A", "B", "C", "D", "E", "F")
+
+    # Pedimos JSON sin markdown, pero el modelo a veces lo envuelve igual.
+    _FENCE_RE = re.compile(r"```[a-zA-Z0-9_+-]*\s*(?P<body>.*?)\s*```", re.DOTALL)
+
+    def __init__(self, api_key: str, db, model: Optional[str] = None):
         self.api_key = api_key
         self.db = db
-        self.prompt_version = "v3"  # Updated for Anthropic Claude
-    
+        self.model = model or os.getenv("QUESTION_MODEL") or self.DEFAULT_MODEL
+        self.prompt_version = "v4"  # v4: claude-sonnet-5 + parseo/validacion estrictos
+
     def _normalize_topic(self, topic: str) -> str:
         """Normalize topic for caching"""
         return topic.lower().strip().replace(" ", "_")
@@ -244,7 +273,128 @@ Rules:
 
 Return ONLY valid JSON (no markdown):
 {{"topic":"{topic}","language":"{language}","questions":[...]}}"""
-    
+
+    @classmethod
+    def _extract_json_text(cls, message: Any) -> str:
+        """
+        Saca el JSON del mensaje de Claude.
+
+        Antes esto era `message.content[0].text`, que asume que el primer bloque
+        de la respuesta es texto. Con los modelos actuales el primer bloque puede
+        ser un bloque de pensamiento (texto vacio por omision) y la indexacion
+        silenciosamente entregaba una cadena vacia a json.loads. Tambien separa
+        los dos motivos de corte que antes se veian identicos a "JSON invalido":
+        respuesta truncada y rechazo del clasificador.
+        """
+        stop_reason = getattr(message, "stop_reason", None)
+        if stop_reason == "refusal":
+            raise QuestionGenerationError(
+                "El modelo rechazo generar preguntas para este tema "
+                "(stop_reason=refusal). Pide otro tema."
+            )
+        if stop_reason == "max_tokens":
+            raise QuestionGenerationError(
+                f"La respuesta se trunco al llegar a max_tokens={cls.MAX_TOKENS}; "
+                "el JSON quedo incompleto."
+            )
+
+        texts = [
+            block.text
+            for block in getattr(message, "content", []) or []
+            if getattr(block, "type", None) == "text"
+        ]
+        if not texts:
+            raise QuestionGenerationError(
+                f"La respuesta no trae ningun bloque de texto (stop_reason={stop_reason})."
+            )
+
+        text = "".join(texts).strip()
+
+        # Quita el bloque de markdown completo si viene envuelto.
+        fenced = cls._FENCE_RE.search(text)
+        if fenced:
+            text = fenced.group("body").strip()
+
+        # Ultimo recurso: recorta cualquier prosa antes/despues del objeto JSON.
+        if not text.startswith("{"):
+            start = text.find("{")
+            end = text.rfind("}")
+            if start == -1 or end <= start:
+                raise QuestionGenerationError(
+                    "La respuesta no contiene un objeto JSON reconocible."
+                )
+            text = text[start:end + 1]
+
+        return text
+
+    @classmethod
+    def _validate_question_set(cls, data: Any) -> None:
+        """
+        Exige la forma exacta que server.py consume mas adelante.
+
+        server.py:1854 lee `questions[i]["correct_letter"]` sin red de proteccion:
+        un set mal formado no falla al crear la partida, falla a mitad del
+        websocket cuando los dos jugadores ya estan dentro. Mejor reventar aqui.
+        """
+        if not isinstance(data, dict):
+            raise QuestionGenerationError(
+                f"Se esperaba un objeto JSON, llego {type(data).__name__}."
+            )
+
+        questions = data.get("questions")
+        if not isinstance(questions, list):
+            raise QuestionGenerationError(
+                "Falta la lista 'questions' o no es una lista."
+            )
+        if len(questions) != cls.EXPECTED_QUESTIONS:
+            raise QuestionGenerationError(
+                f"Se esperaban {cls.EXPECTED_QUESTIONS} preguntas, llegaron {len(questions)}."
+            )
+
+        for index, question in enumerate(questions):
+            where = f"pregunta {index + 1}"
+
+            if not isinstance(question, dict):
+                raise QuestionGenerationError(
+                    f"{where}: se esperaba un objeto, llego {type(question).__name__}."
+                )
+
+            text = question.get("question")
+            if not isinstance(text, str) or not text.strip():
+                raise QuestionGenerationError(f"{where}: 'question' vacio o no es texto.")
+
+            options = question.get("options")
+            if not isinstance(options, dict):
+                raise QuestionGenerationError(f"{where}: falta el objeto 'options'.")
+            if set(options) != set(cls.OPTION_LETTERS):
+                raise QuestionGenerationError(
+                    f"{where}: 'options' debe tener exactamente las llaves "
+                    f"{', '.join(cls.OPTION_LETTERS)}; llegaron: "
+                    f"{', '.join(sorted(map(str, options))) or '(ninguna)'}."
+                )
+            for letter in cls.OPTION_LETTERS:
+                value = options[letter]
+                if not isinstance(value, str) or not value.strip():
+                    raise QuestionGenerationError(
+                        f"{where}: la opcion {letter} esta vacia o no es texto."
+                    )
+
+            correct = question.get("correct_letter")
+            if correct not in cls.OPTION_LETTERS:
+                raise QuestionGenerationError(
+                    f"{where}: 'correct_letter' debe ser una de "
+                    f"{', '.join(cls.OPTION_LETTERS)}; llego {correct!r}."
+                )
+
+            # server.py lee estos dos con .get()/.pop(), asi que no son
+            # obligatorios, pero si vienen deben ser texto.
+            for optional_field in ("hint", "explanation_short"):
+                value = question.get(optional_field)
+                if value is not None and not isinstance(value, str):
+                    raise QuestionGenerationError(
+                        f"{where}: '{optional_field}' debe ser texto si viene."
+                    )
+
     async def generate_questions(self, topic: str, language: str) -> Dict[str, Any]:
         """Generate or retrieve cached question set"""
         import anthropic
@@ -268,31 +418,44 @@ Return ONLY valid JSON (no markdown):
         
         # Generate new set using Anthropic Claude
         client = anthropic.Anthropic(api_key=self.api_key)
-        
+
         prompt = self._build_prompt(topic, language)
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=2048,
-            system=self.SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        
+        try:
+            message = client.messages.create(
+                model=self.model,
+                max_tokens=self.MAX_TOKENS,
+                system=self.SYSTEM_PROMPT,
+                # Generar trivia es una tarea determinista y los tokens de
+                # razonamiento salen del mismo max_tokens que el JSON. En
+                # claude-sonnet-5 el pensamiento adaptativo esta encendido por
+                # omision, asi que hay que apagarlo de forma explicita.
+                thinking={"type": "disabled"},
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+        except anthropic.APIStatusError as exc:
+            raise QuestionGenerationError(
+                f"La API de Anthropic rechazo la peticion con modelo '{self.model}' "
+                f"(HTTP {exc.status_code}): {exc}"
+            ) from exc
+        except anthropic.APIConnectionError as exc:
+            raise QuestionGenerationError(
+                f"No se pudo contactar la API de Anthropic: {exc}"
+            ) from exc
+
         # Parse and validate
-        response_text = message.content[0].text.strip()
-        if response_text.startswith("```"):
-            response_text = response_text.split("```")[1]
-            if response_text.startswith("json"):
-                response_text = response_text[4:]
-        response_text = response_text.rstrip("```")
-        
-        data = json.loads(response_text)
-        
-        # Validate structure
-        if 'questions' not in data or len(data['questions']) != 10:
-            raise ValueError(f"Invalid question set: expected 10 questions, got {len(data.get('questions', []))}")
-        
+        response_text = self._extract_json_text(message)
+        try:
+            data = json.loads(response_text)
+        except json.JSONDecodeError as exc:
+            raise QuestionGenerationError(
+                f"El modelo '{self.model}' no devolvio JSON valido ({exc.msg} "
+                f"en la posicion {exc.pos}); longitud de la respuesta: {len(response_text)}"
+            ) from exc
+
+        self._validate_question_set(data)
+
         # Cache the set
         self.db.question_sets.insert_one({
             'topic': topic,
