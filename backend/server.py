@@ -27,7 +27,7 @@ from models import (
 )
 from utils import (
     hash_password, verify_password, create_access_token, decode_access_token,
-    serialize_doc, ELOCalculator, QuestionGenerator
+    extract_bearer_token, serialize_doc, ELOCalculator, QuestionGenerator
 )
 from stripe_handler import (
     StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse
@@ -192,10 +192,13 @@ async def get_current_user(
     session_token: Optional[str] = Cookie(None)
 ) -> dict:
     """Get current authenticated user - supports both JWT and session cookie"""
-    # First try Authorization header (JWT)
-    if authorization:
+    # First try Authorization header (JWT). Un header sin el esquema `Bearer`
+    # no es un credencial usable: se ignora y se cae al cookie de sesion, que
+    # termina en el 401 del final. No se lanza aqui porque el `except` de abajo
+    # se comeria la HTTPException y romperia el 401.
+    token = extract_bearer_token(authorization)
+    if token:
         try:
-            token = authorization.replace("Bearer ", "")
             payload = decode_access_token(token)
             if payload:
                 user = users_col.find_one({"_id": ObjectId(payload["user_id"])})
@@ -938,10 +941,15 @@ if not ADMIN_SECRET:
 
 async def verify_admin(authorization: Optional[str] = Header(None)):
     """Verify admin access"""
-    if not authorization:
+    # 401 cuando no hay credencial Bearer que leer: header ausente, esquema
+    # distinto de `Bearer`, o `Bearer` sin token. Los tres casos son "no
+    # presentaste credencial", igual que el header ausente de siempre. El 403
+    # queda reservado al token bien formado pero incorrecto, que es el contrato
+    # que ya consumian los clientes.
+    token = extract_bearer_token(authorization)
+    if not token:
         raise HTTPException(status_code=401, detail="Admin authentication required")
 
-    token = authorization.replace("Bearer ", "")
     # compare_digest sobre str solo acepta ASCII: un token con un caracter
     # no-ASCII levantaba TypeError y FastAPI respondia 500 en vez de 403.
     # Comparar bytes es la forma recomendada y sigue siendo tiempo constante.
