@@ -942,7 +942,10 @@ async def verify_admin(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Admin authentication required")
 
     token = authorization.replace("Bearer ", "")
-    if not hmac.compare_digest(token, ADMIN_SECRET):
+    # compare_digest sobre str solo acepta ASCII: un token con un caracter
+    # no-ASCII levantaba TypeError y FastAPI respondia 500 en vez de 403.
+    # Comparar bytes es la forma recomendada y sigue siendo tiempo constante.
+    if not hmac.compare_digest(token.encode("utf-8"), ADMIN_SECRET.encode("utf-8")):
         raise HTTPException(status_code=403, detail="Invalid admin credentials")
 
     return True
