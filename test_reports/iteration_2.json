@@ -90,8 +90,8 @@
   "detailed_test_results": {
     "bug_fix_verification": {
       "test_accounts": {
-        "test1": "test1@knowledgewars.app (password: test123)",
-        "test2": "test2@knowledgewars.app (password: test123)",
+        "test1": "test1@knowledgewars.app (password: <redacted>)",
+        "test2": "test2@knowledgewars.app (password: <redacted>)",
         "initial_credits": "20 games each"
       },
       "test_sequence": [

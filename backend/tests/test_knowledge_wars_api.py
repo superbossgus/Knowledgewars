@@ -17,7 +17,7 @@ WS_URL = BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')
 USER1_EMAIL = "test1@knowledgewars.app"
 USER2_EMAIL = "test2@knowledgewars.app"
 PASSWORD = "test123"
-ADMIN_KEY = "knowledge-wars-admin-2024"
+ADMIN_KEY = os.environ.get('ADMIN_SECRET', '')
 
 
 class TestAuthentication:
