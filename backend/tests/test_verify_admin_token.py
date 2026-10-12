@@ -115,8 +115,12 @@ def main():
     malo_ascii = status_con("x" * len(ADMIN_TOKEN))
     ok("token ASCII incorrecto -> 403", malo_ascii == 403, str(malo_ascii))
 
+    # BOS-242 endurecio el parseo del esquema: `Bearer` sin token ya no es un
+    # credencial incorrecto (403) sino la ausencia de credencial (401), igual
+    # que el header ausente. Los casos de esquema estan en
+    # test_authorization_header_parsing.py.
     vacio = status_con("")
-    ok("token vacio -> 403", vacio == 403, str(vacio))
+    ok("token vacio -> 401", vacio == 401, str(vacio))
 
     # El caso de BOS-236. Cada uno de estos devolvia 500 antes del arreglo.
     no_ascii = {

@@ -50,6 +50,30 @@ def decode_access_token(token: str) -> Optional[Dict]:
         return None
 
 
+def extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
+    """Extraer el token de un header `Authorization: Bearer <token>`.
+
+    Devuelve None cuando el header no trae un credencial Bearer usable: si
+    falta, si el esquema no es `Bearer` (sin distinguir mayusculas, como pide
+    el RFC 6750 seccion 2.1) o si no viene token despues del esquema.
+
+    Antes se usaba `authorization.replace("Bearer ", "")`, que no es un strip
+    de prefijo: no exige el esquema, asi que un header con el token pelado se
+    aceptaba igual, y borraba la subcadena `Bearer ` en cualquier posicion.
+    """
+    if not authorization:
+        return None
+
+    scheme, _, credentials = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+
+    # El RFC permite mas de un espacio entre el esquema y el credencial, y el
+    # token mismo no puede contener espacios.
+    token = credentials.strip()
+    return token or None
+
+
 def serialize_doc(doc: Any) -> Any:
     """Serialize MongoDB document for JSON response"""
     if doc is None:
