@@ -186,6 +186,29 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# RFC 6750 seccion 3: un 401 a una peticion de *recurso protegido* debe traer el
+# reto `WWW-Authenticate` con el esquema que el servidor acepta, para que un
+# cliente conforme sepa con que reintentar.
+#
+# Va pelado, sin `realm` ni `error`:
+#
+#   * `realm` es opcional y aqui no hay nada que anunciar: la API tiene un solo
+#     espacio de proteccion.
+#   * los parametros `error`/`error_description` solo aplican cuando la peticion
+#     *si* presento un access token Bearer y fallo (el `invalid_token` del RFC).
+#     Los 401 de este archivo son el caso contrario -- no se presento credencial
+#     Bearer legible -- y para ese el RFC pide explicitamente no mandar codigo
+#     de error. Mantenerlo pelado tambien evita el riesgo de que una
+#     `error_description` termine reflejando el token recibido.
+#
+# El reto se manda solo en los 401 de recurso protegido (`get_current_user` y
+# `verify_admin`). Los 401 de `/api/auth/login` y `/api/auth/google/session` son
+# de *intercambio de credencial*, no de recurso protegido: ahi no hay token
+# Bearer que reintentar, y anunciar el esquema mandaria al cliente a repetir el
+# login con un token -- ver el comentario en cada uno.
+BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
+
+
 # Authentication dependency
 async def get_current_user(
     authorization: Optional[str] = Header(None),
@@ -219,7 +242,11 @@ async def get_current_user(
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=timezone.utc)
                 if expires_at < datetime.now(timezone.utc):
-                    raise HTTPException(status_code=401, detail="Session expired")
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Session expired",
+                        headers=BEARER_CHALLENGE,
+                    )
             
             # Find user by user_id field
             user = users_col.find_one({"user_id": session["user_id"]}, {"_id": 0})
@@ -232,7 +259,11 @@ async def get_current_user(
             if user:
                 return serialize_doc(user)
     
-    raise HTTPException(status_code=401, detail="Not authenticated")
+    raise HTTPException(
+        status_code=401,
+        detail="Not authenticated",
+        headers=BEARER_CHALLENGE,
+    )
 
 
 # ============================================================================
@@ -298,7 +329,13 @@ async def register(user_data: UserCreate):
 async def login(credentials: UserLogin):
     """Login user"""
     user = users_col.find_one({"email": credentials.email})
-    
+
+    # Sin `WWW-Authenticate: Bearer` a proposito (BOS-249). Este endpoint no es
+    # un recurso protegido por Bearer: es donde se *canjea* usuario y
+    # contrasena por un token. No existe ningun token con el que reintentar
+    # este POST, asi que anunciar el esquema mandaria al cliente conforme al
+    # RFC 6750 a repetir el login con un Bearer. El reto va solo en los 401 de
+    # recurso protegido -- ver `BEARER_CHALLENGE`.
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -357,6 +394,9 @@ async def process_google_session(data: GoogleSessionRequest, response: Response)
                 timeout=10.0
             )
         
+        # Tambien sin reto Bearer, por lo mismo que el login: aqui se canjea un
+        # `session_id` de Google por una sesion local. El 401 dice que ese
+        # session_id no sirve, no que falte un access token (BOS-249).
         if auth_response.status_code != 200:
             raise HTTPException(status_code=401, detail="Invalid session")
         
@@ -948,7 +988,11 @@ async def verify_admin(authorization: Optional[str] = Header(None)):
     # que ya consumian los clientes.
     token = extract_bearer_token(authorization)
     if not token:
-        raise HTTPException(status_code=401, detail="Admin authentication required")
+        raise HTTPException(
+            status_code=401,
+            detail="Admin authentication required",
+            headers=BEARER_CHALLENGE,
+        )
 
     # compare_digest sobre str solo acepta ASCII: un token con un caracter
     # no-ASCII levantaba TypeError y FastAPI respondia 500 en vez de 403.
