@@ -26,14 +26,16 @@ import anthropic
 client = anthropic.Anthropic(api_key=self.api_key)
 
 message = client.messages.create(
-    model="claude-3-5-sonnet-20241022",
-    max_tokens=2048,
+    model="claude-sonnet-5",
+    max_tokens=8192,
     system=self.SYSTEM_PROMPT,
+    thinking={"type": "disabled"},
     messages=[
         {"role": "user", "content": prompt}
     ]
 )
-response_text = message.content[0].text
+# No uses message.content[0].text: el primer bloque puede ser de pensamiento.
+response_text = "".join(b.text for b in message.content if b.type == "text")
 ```
 
 **Beneficios:**
@@ -122,11 +124,12 @@ api_key = os.getenv("ANTHROPIC_API_KEY")
 client = anthropic.Anthropic(api_key=api_key)
 
 message = client.messages.create(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-5",
     max_tokens=100,
+    thinking={"type": "disabled"},
     messages=[{"role": "user", "content": "Hola"}]
 )
-print(message.content[0].text)  # Debería imprimirse la respuesta
+print("".join(b.text for b in message.content if b.type == "text"))
 ```
 
 ### Test 2: Generar Preguntas de Trivia
@@ -188,8 +191,14 @@ Si necesitas volver a OpenAI:
 - **Mejor multiidioma:** Excelente soporte para es, en, pt
 
 ### ⚠️ Cambios en el comportamiento:
-- La variable `prompt_version` cambió de `"v2"` a `"v3"` (fuerza regeneración de preguntas en cache)
-- Usa `claude-3-5-sonnet-20241022` como modelo base
+- La variable `prompt_version` cambió de `"v2"` a `"v3"`, y luego a `"v4"` (fuerza regeneración de preguntas en cache)
+- Usa `claude-sonnet-5` como modelo base. `claude-3-5-sonnet-20241022` se retiró el
+  2025-10-28 y devuelve 404; no lo vuelvas a poner. Para cambiar de modelo sin
+  tocar código, usa la variable de entorno `QUESTION_MODEL` (por ejemplo
+  `claude-haiku-4-5` si el costo por tema nuevo importa).
+- `thinking={"type": "disabled"}` es obligatorio: en los modelos actuales el
+  pensamiento adaptativo está encendido por omisión y sus tokens salen del mismo
+  `max_tokens` que el JSON de respuesta.
 - La API de Anthropic usa estructura `messages` en lugar de `UserMessage`
 
 ---

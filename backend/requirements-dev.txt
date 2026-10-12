@@ -1,0 +1,12 @@
+# Dependencias solo de pruebas. Render NO instala este archivo: el build usa
+# requirements.txt. Aqui va lo que haria mas pesado el despliegue sin aportarle
+# nada en produccion.
+#
+#   pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+#
+-r requirements.txt
+
+# MongoDB en memoria. Permite correr la partida de punta a punta
+# (backend/tests/test_e2e_match_local.py) y la consulta de la metrica 3
+# (scripts/test_metrica_jugadores_activados.py) sin un cluster de Atlas.
+mongomock==4.3.0
