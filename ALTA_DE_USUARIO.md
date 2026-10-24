@@ -68,18 +68,48 @@ La segunda (BOS-359, PR #11) cerró tres huecos que la primera dejó abiertos:
   a cinco llamadas y cero espera por token. El costo es que el presupuesto por
   token sube de 5 a 15 intentos — 15 en 10⁶, y 45 por correo cada cuarto de
   hora. Ese intercambio se aprobó con los números escritos en BOS-360.
-- **`verify-reset-code` estrena su propio tope: 30 por IP cada hora**, mirado
+- **`verify-reset-code` estrena su propio tope por IP cada hora**, mirado
   antes de tocar la base, así que el `429` es idéntico para un correo que existe
   y uno que no. No hay tope por correo a propósito: el presupuesto de intentos
   ya es por correo (solo vive un token por correo a la vez), y un cubo por
-  correo sí se podría apuntar a una víctima concreta. Un tope por IP no.
+  correo sí se podría apuntar a una víctima concreta. Un tope por IP no. (Salió
+  en 30 y la tercera tanda lo subió a 90; ver abajo.)
 - **Una solicitud rechazada por el tope de IP ya no gasta cuota del tope por
   correo.** `forgot-password` mira los dos cubos y registra después, así que el
   usuario del salón de evento que choca con el tope de IP conserva sus tres
   solicitudes enteras.
 
+La tercera (BOS-361, PR #13) cerró tres bordes que la segunda dejó abiertos:
+
+- **El tope de verify por IP sube de 30 a 90 por hora.** 30 estaba **por debajo
+  del tráfico legítimo que el propio tope de `forgot-password` deja generar desde
+  esa misma IP**: 20 personas detrás de un NAT pueden pedir su código y cada una
+  necesita 1 a 3 llamadas de verify, o sea hasta 60. Medido, solo 10 de 20
+  personas de un salón de evento completaban el rescate, y la 11 se quedaba
+  esperando casi una hora con un código en la mano que vive 15 minutos — se le
+  vencía antes de que la ventana se liberara. `3 × 20 = 60` es el techo del
+  tráfico legítimo; con margen, 90. **No afloja la fuerza bruta:** el que acota
+  el ataque contra *una* cuenta es el presupuesto por token (15 intentos en los
+  15 minutos de vida), y ese no se movió. El tope por IP solo acota a cuántas
+  cuentas **distintas** puede golpear una sola máquina por hora.
+- **La ventana de intentos se escribe atómica.** Era un read-modify-write: se
+  leía el documento, se podaba en Python y se reescribía la lista entera. No era
+  explotable por arquitectura y no por diseño — el handler no tiene un solo
+  `await` entre la lectura y la escritura, así que con un worker corría atómico
+  —, pero se volvía real con más de un worker de uvicorn o más de una instancia.
+  Ahora el fallo se agrega con `$push` y la ventana se poda con `$pull` por
+  fecha, así que la escritura no depende de lo que se leyó.
+- **`password_reset_requests` estrena índice TTL sobre `created_at`**, con la
+  vida de la ventana más larga de los cubos (3600 s). La poda era por llave y
+  perezosa, así que los renglones de una llave que no se vuelve a consultar
+  nunca se quedaban para siempre, y el PR #11 lo aceleró: `verify-reset-code`
+  escribe un renglón por llamada. El cluster es un M0 de 512 MB. El TTL tiene
+  que ser **≥ la ventana más larga** o borraría renglones que todavía cuentan
+  para un tope, y hay una prueba que amarra las dos constantes para que nunca se
+  separen.
+
 Fijado por `backend/tests/test_recuperacion_de_contrasena.py`
-(**123 verificaciones**, en verde con mongomock y contra Mongo real, reproducidas
+(**143 verificaciones**, en verde con mongomock y contra Mongo real, reproducidas
 contra `main` ya mergeado).
 
 **Esto es lo que falta para poder abrir el alta:** sin `SMTP_HOST` y `SMTP_FROM`
@@ -91,17 +121,9 @@ real**, porque una cuenta cuya contraseña se olvide queda perdida.
 
 ### Lo que sigue del rescate, y por qué el siguiente paso no es otro tope
 
-Dos cosas quedan abiertas. Ninguna bloquea el alta por sí sola; la cuenta de
-envío de arriba sigue siendo la única condición dura.
+Queda una cosa abierta. No bloquea el alta por sí sola; la cuenta de envío de
+arriba sigue siendo la única condición dura.
 
-- **BOS-361 — tres bordes del PR #11.** El tope de verify (30 por IP cada hora)
-  es más chico que el tráfico legítimo que el tope de `forgot-password` (20 por
-  IP cada hora) deja generar desde esa misma IP: medido, 10 de 20 personas de un
-  salón de evento completan el rescate y la 11 espera una hora con un código que
-  vive 15 minutos. Además la ventana de intentos se reescribe entera desde
-  Python (read-modify-write; hoy no es explotable porque el handler no tiene un
-  solo `await`, pero sí con más de un worker), y `password_reset_requests_col`
-  no tiene TTL, así que acumula renglones.
 - **BOS-362 — el rescate por enlace con token de 128 bits.** Es el arreglo de
   fondo: un token de 128 bits no se adivina, así que no necesita tope de
   intentos, y sin tope de intentos no hay nada que un tercero pueda quemar. Eso
@@ -110,7 +132,8 @@ envío de arriba sigue siendo la única condición dura.
   que la decisión va con un plan de prueba de navegador (como BOS-355) y no de
   corrido. **Mientras eso no se decida, no se agregan más topes sobre el código
   de 6 dígitos:** el secreto tiene 10⁶ combinaciones y el siguiente movimiento
-  en ese camino es cambiar el secreto, no el tope.
+  en ese camino es cambiar el secreto, no el tope. (El PR #13 no agregó ninguno:
+  subió uno que estaba mal dimensionado y dejó el resto igual.)
 
 ## Había dos caminos de alta, y solo uno era nuestro
 
