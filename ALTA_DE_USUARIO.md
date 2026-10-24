@@ -30,6 +30,39 @@ Todo lo anterior está fijado por `backend/tests/test_alta_sin_google.py`
 (39 verificaciones). Lo que sigue de este documento es la medición que llevó a
 la decisión; se deja tal cual porque es la evidencia.
 
+## El rescate de contraseña ya no es un take-over, y por eso necesita correo
+
+Al quitar Google, «olvidé mi contraseña» quedó como el único rescate de las
+cuentas sin contraseña, así que se revisó entero (BOS-353). Lo que se encontró
+no lo había introducido ese cambio: estaba en `main` y aplicaba a todas las
+cuentas.
+
+`POST /api/auth/forgot-password` devolvía en la **respuesta HTTP** el código de
+6 dígitos (`_dev_code`) y el `reset_token`. Con cualquiera de los dos, quien
+llamara al endpoint con un correo ajeno se quedaba con la cuenta — y el token
+solo bastaba, porque `/api/auth/reset-password` no pide el código. Ya no sale
+ninguno de los dos: el código solo viaja por correo.
+
+Lo que cambió:
+
+- el código se genera con `secrets`, no con `random`;
+- cinco intentos fallidos en `verify-reset-code` **queman el token**: después ni
+  el código correcto sirve;
+- `forgot-password` tiene tope de solicitudes: 3 por correo cada 15 minutos y
+  20 por IP cada hora, con `429` y `Retry-After`;
+- el envío vive en `backend/mailer.py` y habla **SMTP**, no la API de un
+  proveedor concreto, así que elegir proveedor es poner variables de entorno.
+
+Fijado por `backend/tests/test_recuperacion_de_contrasena.py`
+(95 verificaciones, en verde con mongomock y contra Mongo real).
+
+**Esto es lo que falta para poder abrir el alta:** sin `SMTP_HOST` y `SMTP_FROM`
+configurados no sale ningún correo, y entonces el rescate no funciona — el
+endpoint contesta lo mismo, pero el usuario no recibe nada. Es a propósito:
+entre «no se puede recuperar» y «cualquiera se toma la cuenta», se elige lo
+primero. **Mientras no haya cuenta de envío, no se da de alta al primer usuario
+real**, porque una cuenta cuya contraseña se olvide queda perdida.
+
 ## Había dos caminos de alta, y solo uno era nuestro
 
 Esto es lo que se encontró el 24 de octubre, antes de quitar Google:

@@ -75,6 +75,34 @@ services:
       - key: QUESTION_MODEL
         sync: false
 
+      # --- Envio del codigo de recuperacion de contrasena (BOS-353) ---
+      #
+      # Mientras no haya cuenta de envio, estas quedan vacias y el rescate de
+      # contrasena NO funciona: el codigo no viaja en la respuesta HTTP (eso era
+      # el take-over) y sin SMTP no sale por ningun lado. Es a proposito, y es
+      # lo que hay que resolver antes de dar de alta al primer usuario real.
+      #
+      # Se habla SMTP, asi que el proveedor que se elija (Brevo, Resend, Amazon
+      # SES, Google Workspace) se configura aqui sin tocar codigo:
+      #   SMTP_HOST=smtp-relay.brevo.com  SMTP_PORT=587
+      #   SMTP_FROM=Knowledge Wars <no-reply@dominio-propio>
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      # Credencial del proveedor. Se pega en el panel de Render, nunca aqui.
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+
+      # NO poner ENVIRONMENT ni PASSWORD_RESET_LOG_CODE en produccion. La
+      # primera se lee como "production" por omision justo para que esto sea un
+      # no-hacer-nada, y la segunda (que escribe el codigo en el log) hace
+      # fallar el arranque si se enciende fuera de desarrollo.
+
   - type: web
     name: knowledgewars-frontend
     runtime: static
