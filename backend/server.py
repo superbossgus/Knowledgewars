@@ -6,6 +6,7 @@ FastAPI backend with WebSocket support for real-time duels
 import os
 import asyncio
 import hmac
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -31,6 +32,10 @@ from utils import (
 from stripe_handler import (
     StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse
 )
+from mailer import (
+    send_password_reset_code, is_configured as mailer_is_configured,
+    resolve_log_code_flag
+)
 
 # Initialize FastAPI
 app = FastAPI(title="Knowledge Wars API")
@@ -47,6 +52,16 @@ if not CORS_ORIGINS:
     )
 if "*" in CORS_ORIGINS:
     raise ValueError("CORS_ORIGINS cannot be '*' because the API sends credentials")
+
+# Recuperacion de contrasena: el unico camino de desarrollo que queda, apagado
+# por omision. `PASSWORD_RESET_LOG_CODE=1` escribe el codigo de 6 digitos en el
+# log del servidor cuando no hay SMTP configurado; el codigo NO viaja nunca en
+# la respuesta HTTP -- eso era el take-over de BOS-353. El arranque falla si la
+# bandera esta encendida y `ENVIRONMENT` no es "development", y `ENVIRONMENT` se
+# lee con "production" por omision para que un olvido falle cerrado.
+PASSWORD_RESET_LOG_CODE = resolve_log_code_flag(
+    os.getenv("PASSWORD_RESET_LOG_CODE"), os.getenv("ENVIRONMENT")
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,6 +95,10 @@ payment_transactions_col = db["payment_transactions"]
 # Google (BOS-350); ver la nota en la seccion de auth.
 user_sessions_col = db["user_sessions"]
 password_resets_col = db["password_resets"]  # For password recovery
+# Un renglon por solicitud de recuperacion aceptada, para el tope por correo y
+# por IP de `/api/auth/forgot-password` (BOS-353). Solo la clave del cubo
+# ("email:<correo>" o "ip:<ip>") y la hora; nada del usuario ni del codigo.
+password_reset_requests_col = db["password_reset_requests"]
 admin_users_col = db["admin_users"]  # Admin panel users
 
 # Indexes
@@ -98,6 +117,7 @@ user_sessions_col.create_index("user_id")
 password_resets_col.create_index("token", unique=True)
 password_resets_col.create_index("email")
 password_resets_col.create_index("expires_at")
+password_reset_requests_col.create_index([("key", 1), ("created_at", DESCENDING)])
 coupons_col.create_index("code", unique=True)
 
 # Services
@@ -468,15 +488,109 @@ class PasswordResetConfirm(BaseModel):
     token: str
     new_password: str
 
+
+# Topes del rescate de contrasena (BOS-353).
+#
+# Un codigo de 6 digitos son 10^6 combinaciones. Sin tope de intentos eso no es
+# un secreto: es una adivinanza con tiempo infinito, y 15 minutos de vida no
+# ayudan contra un script. Con 5 intentos por token, la probabilidad de acertar
+# es 5 en un millon, y el quinto fallo mata el token entero: ni el codigo
+# correcto sirve despues.
+RESET_CODE_MAX_ATTEMPTS = 5
+
+# Y sin tope de solicitudes se pueden pedir codigos en bucle, que es la otra
+# mitad: cada solicitud nueva estrena cinco intentos. El tope por correo es el
+# que no se puede esquivar. El de IP es mas flojo a proposito: Knowledge Wars
+# se juega en eventos, donde un salon entero sale por la misma IP, y un tope
+# estrecho ahi dejaria fuera a usuarios legitimos.
+RESET_REQUESTS_PER_EMAIL = 3
+RESET_REQUESTS_PER_EMAIL_WINDOW_MINUTES = 15
+RESET_REQUESTS_PER_IP = 20
+RESET_REQUESTS_PER_IP_WINDOW_MINUTES = 60
+
+# La misma respuesta para un correo que existe y uno que no: el endpoint no dice
+# quien esta registrado. Y ya no dice ni el codigo (`_dev_code`) ni el
+# `reset_token`: con cualquiera de los dos, quien llamara al endpoint con un
+# correo ajeno se quedaba con la cuenta -- el token solo bastaba, porque
+# `/api/auth/reset-password` no pide el codigo.
+RESET_RESPUESTA_GENERICA = {
+    "success": True,
+    "message": "Si el email existe, recibirás instrucciones",
+}
+
+
+def reset_client_ip(request: Request) -> str:
+    """IP del cliente para el tope por IP. Best-effort, y a sabiendas.
+
+    Detras del proxy de Render la IP real llega en `X-Forwarded-For` y el proxy
+    reescribe la cabecera; un cliente que hable directo con el backend la puede
+    inventar. Por eso el tope que importa es el de por-correo: ese no se
+    esquiva. Este otro es para que barrer una lista de correos desde una sola
+    maquina cueste algo.
+    """
+    adelantada = request.headers.get("x-forwarded-for", "")
+    if adelantada:
+        return adelantada.split(",")[0].strip()[:64]
+    return request.client.host if request.client else "desconocida"
+
+
+def consume_reset_quota(key: str, limit: int, window_minutes: int) -> Optional[int]:
+    """Registra una solicitud y devuelve los segundos a esperar si se paso del tope.
+
+    `None` = dentro del limite (y queda registrada). Una solicitud rechazada
+    **no** se registra, asi que la ventana no se alarga sola mientras alguien
+    insiste. Los renglones viejos del mismo cubo se borran aqui mismo, que es
+    todo el mantenimiento que necesita la coleccion.
+    """
+    ahora = datetime.now(timezone.utc)
+    desde = ahora - timedelta(minutes=window_minutes)
+
+    password_reset_requests_col.delete_many({"key": key, "created_at": {"$lt": desde}})
+    previas = list(
+        password_reset_requests_col.find({"key": key, "created_at": {"$gte": desde}})
+    )
+
+    if len(previas) >= limit:
+        mas_vieja = min(p["created_at"] for p in previas)
+        if mas_vieja.tzinfo is None:
+            mas_vieja = mas_vieja.replace(tzinfo=timezone.utc)
+        espera = (mas_vieja + timedelta(minutes=window_minutes) - ahora).total_seconds()
+        return max(int(espera), 1)
+
+    password_reset_requests_col.insert_one({"key": key, "created_at": ahora})
+    return None
+
+
 @app.post("/api/auth/forgot-password")
-async def forgot_password(data: PasswordResetRequest):
-    """Request password reset - generates a reset token"""
+async def forgot_password(data: PasswordResetRequest, request: Request):
+    """Request password reset - manda un codigo de 6 digitos por correo"""
+    # El tope va antes de mirar la base: asi cuesta lo mismo (y se limita
+    # igual) pedir el codigo de un correo que existe y de uno que no.
+    clave_correo = data.email.strip().lower()
+    espera = consume_reset_quota(
+        f"email:{clave_correo}",
+        RESET_REQUESTS_PER_EMAIL,
+        RESET_REQUESTS_PER_EMAIL_WINDOW_MINUTES,
+    )
+    if espera is None:
+        espera = consume_reset_quota(
+            f"ip:{reset_client_ip(request)}",
+            RESET_REQUESTS_PER_IP,
+            RESET_REQUESTS_PER_IP_WINDOW_MINUTES,
+        )
+    if espera is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiadas solicitudes de recuperación. Intenta de nuevo en unos minutos",
+            headers={"Retry-After": str(espera)},
+        )
+
     user = users_col.find_one({"email": data.email})
-    
+
     if not user:
         # Don't reveal if email exists or not for security
-        return {"success": True, "message": "Si el email existe, recibirás instrucciones"}
-    
+        return dict(RESET_RESPUESTA_GENERICA)
+
     # Aqui habia una rama que a las cuentas de Google les contestaba "usa
     # Google Sign-In" en vez de mandarles el codigo. Quitada en BOS-350: ese
     # era justo el renglon que las dejaba encerradas al quitar Google. Son las
@@ -484,12 +598,15 @@ async def forgot_password(data: PasswordResetRequest):
 
     # Delete any existing reset tokens for this email
     password_resets_col.delete_many({"email": data.email})
-    
-    # Generate reset token (6-digit code for simplicity)
-    import random
-    reset_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+
+    # El codigo sale de `secrets`, no de `random`: `random` es un Mersenne
+    # Twister sembrado con la hora, reconstruible desde unas cuantas salidas.
+    # Mientras el codigo viajaba en la respuesta eso no cambiaba nada; ahora que
+    # hay que tener el correo para leerlo, es la diferencia entre "hay que tener
+    # el correo" y "hay que adivinar bien".
+    reset_code = f"{secrets.randbelow(1000000):06d}"
     reset_token = f"reset_{uuid.uuid4().hex}"
-    
+
     # Store reset token (expires in 15 minutes)
     password_resets_col.insert_one({
         "email": data.email,
@@ -497,41 +614,79 @@ async def forgot_password(data: PasswordResetRequest):
         "code": reset_code,
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
         "created_at": datetime.now(timezone.utc),
-        "used": False
+        "used": False,
+        "attempts": 0,
     })
-    
-    # In production, you would send an email here with the code
-    # For now, we'll return the code in the response (REMOVE IN PRODUCTION)
-    return {
-        "success": True,
-        "message": "Código de recuperación enviado",
-        "reset_token": reset_token,
-        # NOTA: En producción, NO devolver el código - enviarlo por email
-        "_dev_code": reset_code  # Solo para desarrollo
-    }
+
+    # `smtplib` es sincrona: va a un hilo para no parar el loop mientras el
+    # proveedor contesta.
+    enviado = await asyncio.to_thread(send_password_reset_code, data.email, reset_code)
+    if not enviado:
+        if not mailer_is_configured():
+            print(
+                "forgot-password: no hay SMTP configurado (SMTP_HOST/SMTP_FROM), "
+                "asi que el codigo no se entrego a nadie"
+            )
+        if PASSWORD_RESET_LOG_CODE:
+            # Solo con ENVIRONMENT=development; el arranque lo garantiza.
+            print(f"[desarrollo] codigo de recuperacion de {data.email}: {reset_code}")
+
+    # Se contesta lo mismo haya salido el correo o no: el resultado del envio no
+    # es informacion del cliente, y decirlo filtraria que la cuenta existe.
+    return dict(RESET_RESPUESTA_GENERICA)
 
 @app.post("/api/auth/verify-reset-code")
 async def verify_reset_code(email: str, code: str):
     """Verify the reset code and return the reset token"""
+    # Se busca por correo, no por correo+codigo: para contar un intento fallido
+    # hay que encontrar el token primero. Solo hay uno vivo por correo, porque
+    # `forgot-password` borra los anteriores.
     reset_doc = password_resets_col.find_one({
         "email": email,
-        "code": code,
         "used": False
     })
-    
+
+    # El mismo 400 para todo lo que no sea el codigo correcto: un codigo
+    # equivocado, un token que ya no existe y un token quemado por intentos se
+    # contestan igual, para no decir en que estado esta el rescate de nadie.
+    invalido = HTTPException(status_code=400, detail="Código inválido o expirado")
+
     if not reset_doc:
-        raise HTTPException(status_code=400, detail="Código inválido o expirado")
-    
+        raise invalido
+
     # Check expiry
     expires_at = reset_doc["expires_at"]
     if isinstance(expires_at, str):
         expires_at = datetime.fromisoformat(expires_at)
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
-    
+
     if expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="El código ha expirado")
-    
+
+    intentos = int(reset_doc.get("attempts", 0) or 0)
+    if intentos >= RESET_CODE_MAX_ATTEMPTS:
+        password_resets_col.update_one(
+            {"token": reset_doc["token"]}, {"$set": {"used": True}}
+        )
+        raise invalido
+
+    # Se comparan bytes, no cadenas: `compare_digest` con `str` revienta con un
+    # TypeError si el texto no es ASCII, y un codigo con acentos saldria como un
+    # 500 en vez del 400 que le toca. Es la misma trampa de BOS-236.
+    enviado_bytes = str(code or "").encode("utf-8")
+    guardado_bytes = str(reset_doc.get("code") or "").encode("utf-8")
+    if not hmac.compare_digest(enviado_bytes, guardado_bytes):
+        intentos += 1
+        cambios = {"attempts": intentos}
+        if intentos >= RESET_CODE_MAX_ATTEMPTS:
+            # Quemado: ni el codigo correcto sirve ya, y `reset-password`
+            # tampoco acepta el token porque busca `used: False`. Hay que pedir
+            # uno nuevo, y eso tiene su propio tope.
+            cambios["used"] = True
+        password_resets_col.update_one({"token": reset_doc["token"]}, {"$set": cambios})
+        raise invalido
+
     return {"success": True, "reset_token": reset_doc["token"]}
 
 @app.post("/api/auth/reset-password")

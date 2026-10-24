@@ -286,17 +286,22 @@ def capa_3_la_cuenta_vieja_de_google_no_queda_encerrada():
     ok("forgot-password -> 200", res.status_code == 200, str(res.status_code))
     cuerpo = res.json()
     ok(
-        "forgot-password SI entrega un reset_token a una cuenta de Google",
-        bool(cuerpo.get("reset_token")),
-        repr(cuerpo),
-    )
-    codigo = cuerpo.get("_dev_code")
-    ok("forgot-password entrega el codigo de 6 digitos", bool(codigo) and len(str(codigo)) == 6, repr(codigo))
-    ok(
         "el mensaje ya no dice 'usa Google Sign-In'",
         "Google" not in str(cuerpo.get("message", "")),
         repr(cuerpo.get("message")),
     )
+    # BOS-353: el codigo y el token ya NO viajan en la respuesta. Lo que hay
+    # que comprobar aqui es que a una cuenta de Google SI se le genera el
+    # rescate, y eso se ve en la base. Que la respuesta siga limpia lo fija
+    # `test_recuperacion_de_contrasena.py`.
+    reset_doc = server.password_resets_col.find_one({"email": CORREO_GOOGLE, "used": False})
+    ok(
+        "forgot-password SI crea el rescate de una cuenta de Google",
+        reset_doc is not None,
+        repr(cuerpo),
+    )
+    codigo = (reset_doc or {}).get("code")
+    ok("el codigo guardado es de 6 digitos", bool(codigo) and len(str(codigo)) == 6, repr(codigo))
 
     # 3. Verificar el codigo.
     res = client.post(f"/api/auth/verify-reset-code?email={CORREO_GOOGLE}&code={codigo}")
