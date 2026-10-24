@@ -1,17 +1,43 @@
 # Caminos de alta de usuario, y de qué cuelgan
 
 Knowledge Wars nació en Emergent, la plataforma que la unidad dejó en abril de
-2026. El login con Google todavía cuelga de dos dominios de Emergent. Este
-documento dice qué se midió, qué funciona sin ellos y qué costaría quitarlos.
+2026. El login con Google colgaba de dos dominios de Emergent. Este documento
+dice qué se midió, qué funciona sin ellos y qué costó quitarlos.
 
 Medido el **24 de octubre de 2026** (BOS-350). Hallazgo original en BOS-125.
 
-## Hay dos caminos de alta, y solo uno es nuestro
+## Estado: se eligió la opción A y ya está hecha
 
-| # | Camino | Endpoint | Depende de Emergent | ¿Sirve hoy? |
-|---|--------|----------|---------------------|-------------|
-| 1 | Correo y contraseña | `POST /api/auth/register` (`backend/server.py:273`) | **No** | **Sí, completo** |
-| 2 | Google | `POST /api/auth/google/session` (`backend/server.py:382`) | **Sí, dos dominios** | Dudoso — ver abajo |
+**El 24 de octubre de 2026 se decidió quitar Google y quedarse con el alta por
+correo** (opción A de este documento). Está implementado:
+
+- `POST /api/auth/google/session` **ya no existe**. En su lugar quedó una
+  lápida en `backend/server.py` que dice qué había ahí y por qué se fue.
+- El botón «Continuar con Google» y el procesamiento del `session_id` del
+  fragmento **ya no están** en `frontend/src/pages/LoginPage.jsx`. Ningún
+  código vivo del repo le habla a `emergentagent.com`.
+- **Las cuentas viejas de Google no quedaron encerradas.** El login ya no les
+  dice «usa Google»: las manda a «olvidé mi contraseña», y se le quitó a
+  `forgot_password()` la rama que a ellas les negaba el código. Al ponerse
+  contraseña, su `auth_provider` pasa de `"google"` a `"email"`.
+- El cookie `session_token` **se sigue aceptando a propósito**, para no
+  expulsar a una sesión que siga viva en el navegador de alguien (las de
+  `remember_me` duraban 100 años). Lo que ya no ocurre es que se emitan
+  cookies nuevos: nada escribe en `user_sessions`. Se puede borrar esa pieza
+  cuando se confirme que la colección está vacía en producción.
+
+Todo lo anterior está fijado por `backend/tests/test_alta_sin_google.py`
+(39 verificaciones). Lo que sigue de este documento es la medición que llevó a
+la decisión; se deja tal cual porque es la evidencia.
+
+## Había dos caminos de alta, y solo uno era nuestro
+
+Esto es lo que se encontró el 24 de octubre, antes de quitar Google:
+
+| # | Camino | Endpoint | Depende de Emergent | ¿Servía? |
+|---|--------|----------|---------------------|----------|
+| 1 | Correo y contraseña | `POST /api/auth/register` | **No** | **Sí, completo** — es el que quedó |
+| 2 | Google | `POST /api/auth/google/session` | **Sí, dos dominios** | Dudoso — **quitado**, ver arriba |
 
 No hay un tercer camino: no hay Apple, ni Facebook, ni teléfono, ni invitación.
 Los otros endpoints bajo `/api/auth/` (`login`, `me`, `logout`,
@@ -23,15 +49,15 @@ recuperación, no de alta.
 `register()` hace todo lo que hace falta para que alguien se registre y juegue,
 sin salir de nuestro backend:
 
-- valida que el correo no exista (`server.py:277`);
-- guarda la contraseña con hash (`server.py:289`);
-- crea la cuenta con ELO inicial 500, rango e idioma (`server.py:287-308`);
-- **da 5 partidas gratis** (`games_remaining: 5`, `server.py:305`), así que la
-  cuenta nueva puede jugar de inmediato sin pagar nada;
-- devuelve un JWT ya listo (`server.py:314`), así que el registro deja al usuario
-  dentro, sin un segundo paso de login.
+- valida que el correo no exista;
+- guarda la contraseña con hash;
+- crea la cuenta con ELO inicial 500, rango e idioma;
+- **da 5 partidas gratis** (`games_remaining: 5`), así que la cuenta nueva
+  puede jugar de inmediato sin pagar nada;
+- devuelve un JWT ya listo, así que el registro deja al usuario dentro, sin un
+  segundo paso de login.
 
-El frontend lo usa en `frontend/src/pages/LoginPage.jsx:108`, en el mismo
+El frontend lo usa en `frontend/src/pages/LoginPage.jsx`, en el mismo
 formulario que el login, con un interruptor «registrarse / entrar».
 
 **Conclusión para la puerta P3: el alta de usuario no depende de Emergent.**
@@ -43,17 +69,16 @@ con Google.
 
 El flujo de Google tiene dos piezas de Emergent, no una:
 
-1. **La página de consentimiento.** El frontend manda al usuario a
-   `https://auth.emergentagent.com/?redirect=...`
-   (`frontend/src/pages/LoginPage.jsx:100`), que regresa con un `session_id` en
-   el fragmento de la URL.
-2. **El canje del `session_id`.** El backend lo cambia por los datos del usuario
-   contra `https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data`
-   (`backend/server.py:392`), mandando el `session_id` en la cabecera
-   `X-Session-ID`.
+1. **La página de consentimiento.** El frontend mandaba al usuario a
+   `https://auth.emergentagent.com/?redirect=...`, que regresaba con un
+   `session_id` en el fragmento de la URL.
+2. **El canje del `session_id`.** El backend lo cambiaba por los datos del
+   usuario contra
+   `https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data`,
+   mandando el `session_id` en la cabecera `X-Session-ID`.
 
-Las dos tienen que funcionar. Si la primera falla, el usuario nunca llega a la
-segunda.
+Las dos tenían que funcionar. Si la primera fallaba, el usuario nunca llegaba
+a la segunda.
 
 ## Qué contestaron los dominios
 
@@ -125,7 +150,7 @@ Gustavo. Dos cambios encimados en la misma pieza es exactamente lo que no
 queremos. Aquí están las tres opciones con alcance y estimación para que se
 elija.
 
-### Opción A — quitar Google, quedarse con correo (recomendada para abrir Q1)
+### Opción A — quitar Google, quedarse con correo ✅ ELEGIDA E IMPLEMENTADA
 
 Borrar el botón de Google y el endpoint `/api/auth/google/session`, y dejar el
 alta con correo que ya funciona.
@@ -133,11 +158,11 @@ alta con correo que ya funciona.
 - **Qué se toca:** `LoginPage.jsx` (el botón, el manejador y el procesamiento del
   `session_id` del fragmento), `server.py` (borrar un endpoint), y una migración
   mínima para las cuentas existentes con `auth_provider: "google"` y sin
-  contraseña — hoy el login les dice «usa Google» (`server.py:343`), y sin Google
-  quedarían encerradas. Se resuelve mandándolas por «olvidé mi contraseña», que
-  ya existe, **pero hay que quitarle una rama**: `forgot_password()`
-  (`server.py:557`) hoy les contesta «esta cuenta usa Google Sign-In» en vez de
-  mandarles el código, así que tal como está no las rescata. Son dos renglones.
+  contraseña — el login les decía «usa Google», y sin Google quedarían
+  encerradas. Se resuelve mandándolas por «olvidé mi contraseña», que ya
+  existe, **pero hay que quitarle una rama**: `forgot_password()` les contestaba
+  «esta cuenta usa Google Sign-In» en vez de mandarles el código, así que tal
+  como estaba no las rescataba. Son dos renglones.
 - **Alcance:** ~1 día de trabajo, incluidas pruebas.
 - **Riesgo:** bajo. No toca la emisión del JWT, solo quita un camino de entrada.
   Es la única de las tres que **no se encima con BOS-136**.
@@ -175,7 +200,7 @@ Dejar el botón como está, sabiendo que cuelga de Emergent.
 - **Cuándo tiene sentido:** si Q1 arranca con el alta por correo y el botón de
   Google es un extra que se puede perder sin apagar el producto.
 
-### Mi recomendación
+### Mi recomendación (la que se siguió)
 
 **A ahora, B después, y nunca C a ciegas.** Concretamente:
 
@@ -186,7 +211,7 @@ Dejar el botón como está, sabiendo que cuelga de Emergent.
 3. Si se quiere Google de vuelta, la opción B va **después** de BOS-136, cuando
    el `JWT_SECRET` ya esté rotado y el flujo de sesión tenga un solo dueño.
 
-Nada de esto se implementa hasta que se diga cuál.
+Los puntos 1 y 2 están hechos. El punto 3 sigue abierto y no tiene fecha.
 
 ## Cómo reproducir las sondas
 
