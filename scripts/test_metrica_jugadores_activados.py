@@ -263,6 +263,46 @@ def test_cuenta_interna_por_correo_y_por_dominio():
     assert internal_user_ids(db, (), ("grupoviter.com",)) == {gus}
 
 
+def test_cuenta_interna_por_patron_atrapa_las_etiquetadas():
+    """
+    Decision 4, tercer mecanismo: `METRICA_EXCLUIR_PATRONES="+kw"`.
+
+    Un correo con etiqueta (`gus+kw1@gmail.com`) no lo atrapa la lista exacta
+    —habria que enumerar cada etiqueta— ni la de dominios, porque el dominio es
+    gmail.com y ahi viven los jugadores de verdad. El patron es la unica forma
+    de decirlo una vez.
+    """
+    db = fresh_db()
+    jugador = add_user(db, "ana", email="ana@gmail.com")
+    kw1 = add_user(db, "kw1", email="gustavojimenezcerda+kw1@gmail.com")
+    kw2 = add_user(db, "kw2", email="GustavoJimenezCerda+KW2@Gmail.com")
+    add_match(db, jugador, kw1)
+    add_match(db, jugador, kw2)
+
+    m = activated_players(db, patrones_internos=("+kw",))
+    assert m["jugadores_activados"] == 1, m
+    assert m["excluidos_internos"] == 2, m
+    assert m["usuarios_registrados"] == 1, m
+    assert m["cuentas_internas"] == 2, m
+
+    # Insensible a mayusculas, como las otras dos listas: +KW2 cae con "+kw".
+    assert internal_user_ids(db, (), (), ("+kw",)) == {kw1, kw2}
+    # El patron es texto literal, no una regex de quien corre el script: el "+"
+    # busca un "+" y no "una o mas" de nada. Sin esto, "+kw" atraparia "kkkw"
+    # y, peor, un patron con parentesis o `.*` tumbaria la consulta.
+    assert internal_user_ids(db, (), (), ("w+",)) == set()
+    # Y el jugador de gmail.com sigue siendo jugador.
+    assert jugador not in internal_user_ids(db, (), (), ("+kw",))
+
+
+def test_patron_no_atrapa_a_nadie_si_la_lista_va_vacia():
+    """La red no se arma sola: sin la variable de entorno nadie es interno."""
+    db = fresh_db()
+    add_user(db, "kw1", email="gustavojimenezcerda+kw1@gmail.com")
+    assert internal_user_ids(db, (), (), ()) == set()
+    assert activated_players(db)["cuentas_internas"] == 0
+
+
 def test_ventana_por_ended_at():
     """Decision 7: --hasta es exclusivo; el corte usa ended_at en UTC."""
     db = fresh_db()

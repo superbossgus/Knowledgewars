@@ -20,7 +20,8 @@ Uso:
 
     # cuentas internas que no deben contar (ademas de las marcadas is_internal)
     METRICA_EXCLUIR_CORREOS="gus@grupoviter.com,qa@grupoviter.com" \
-    METRICA_EXCLUIR_DOMINIOS="grupoviter.com" ... python scripts/...
+    METRICA_EXCLUIR_DOMINIOS="grupoviter.com" \
+    METRICA_EXCLUIR_PATRONES="+kw" ... python scripts/...
 
 Imprime:
 
@@ -107,10 +108,11 @@ def finished_filter(desde=None, hasta=None, incluir_autopartidas=False):
 # ------------------------------------------------------------------ consulta
 
 
-def internal_user_ids(db, correos=(), dominios=()):
+def internal_user_ids(db, correos=(), dominios=(), patrones=()):
     """
     Ids de cuentas internas: marcadas con `is_internal: true`, o cuyo correo
-    esta en `correos`, o cuyo dominio esta en `dominios`.
+    esta en `correos`, o cuyo dominio esta en `dominios`, o que contienen
+    alguno de los `patrones` en cualquier parte del correo.
     """
     condiciones = [{INTERNAL_FLAG: True}]
 
@@ -124,6 +126,14 @@ def internal_user_ids(db, correos=(), dominios=()):
     if dominios:
         sufijos = "|".join(re.escape(d.lower().lstrip("@")) for d in dominios)
         condiciones.append({"email": {"$regex": f"@({sufijos})$", "$options": "i"}})
+    if patrones:
+        # Subcadena en cualquier parte del correo, sin anclas: es lo que atrapa
+        # las cuentas con etiqueta (`gus+kw1@gmail.com`), que ni la lista exacta
+        # ni la de dominios pueden expresar. `re.escape` a proposito: el patron
+        # es texto literal, no una regex que escribe quien corre el script, asi
+        # que "+kw" busca "+kw" y no "k" repetida. Ver METRICA_3.md, decision 4.
+        trozos = "|".join(re.escape(p.strip().lower()) for p in patrones)
+        condiciones.append({"email": {"$regex": f"({trozos})", "$options": "i"}})
 
     return {doc["_id"] for doc in db.users.find({"$or": condiciones}, {"_id": 1})}
 
@@ -152,12 +162,15 @@ def activated_players(
     incluir_autopartidas=False,
     correos_internos=(),
     dominios_internos=(),
+    patrones_internos=(),
 ):
     """La metrica 3 y los numeros que hacen falta para defenderla."""
     filtro = finished_filter(desde, hasta, incluir_autopartidas)
     candidatos = jugadores_con_partida_terminada(db, filtro)
 
-    internos = internal_user_ids(db, correos_internos, dominios_internos)
+    internos = internal_user_ids(
+        db, correos_internos, dominios_internos, patrones_internos
+    )
 
     # El cruce contra `users` no es decorativo: si una cuenta se borra, su id
     # sigue en los documentos de `matches` y contarlo infla la metrica.
@@ -229,6 +242,7 @@ def main(argv=None):
         incluir_autopartidas=args.incluir_autopartidas,
         correos_internos=_lista_env("METRICA_EXCLUIR_CORREOS"),
         dominios_internos=_lista_env("METRICA_EXCLUIR_DOMINIOS"),
+        patrones_internos=_lista_env("METRICA_EXCLUIR_PATRONES"),
     )
 
     width = max(len(key) for key in metrics)

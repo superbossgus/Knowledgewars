@@ -19,8 +19,14 @@ el porqué y con el renglón de `backend/server.py` que lo justifica.
 ```bash
 pip install pymongo
 MONGO_URL="mongodb+srv://..." DB_NAME="knowledge_wars" \
+  METRICA_EXCLUIR_DOMINIOS="viter.com.mx" \
+  METRICA_EXCLUIR_CORREOS="gustavojimenezcerda@gmail.com,admin@cafecontrol.com" \
+  METRICA_EXCLUIR_PATRONES="+kw" \
   python scripts/metrica_jugadores_activados.py --desde 2027-01-01 --hasta 2027-04-01
 ```
+
+Esas tres listas son las cuentas internas ya decididas; el porqué de cada una
+está en la decisión 4.
 
 Sale así — esta salida es real, del escenario sembrado en
 `test_escenario_del_corte` corriendo contra un Mongo local:
@@ -101,17 +107,20 @@ en la misma sesión.
 
 ### 4. ¿Se excluyen cuentas internas? → Sí, del numerador **y** del denominador.
 
-Tres mecanismos, en orden de preferencia:
+Cuatro mecanismos, en orden de preferencia:
 
 1. `users.is_internal: true`. **El backend no escribe este campo todavía**: hay
-   que ponerlo a mano (`db.users.updateOne({email: "..."}, {$set: {is_internal:
-   true}})`) o agregarlo al registro. Es el mecanismo bueno porque queda escrito
-   en la base y no depende de que alguien recuerde una variable de entorno.
+   que ponerlo a mano (ver el comando de abajo) o agregarlo al registro. Es el
+   mecanismo bueno porque queda escrito en la base y no depende de que alguien
+   recuerde una variable de entorno.
 2. `METRICA_EXCLUIR_CORREOS="a@x.com,b@y.com"` — lista exacta.
 3. `METRICA_EXCLUIR_DOMINIOS="grupoviter.com"` — todo el dominio, con o sin
    arroba. Útil para sacar al equipo de un golpe.
+4. `METRICA_EXCLUIR_PATRONES="+kw"` — subcadena en cualquier parte del correo.
+   Es la red para las cuentas etiquetadas; se explica abajo, en «Las cuentas de
+   prueba etiquetadas».
 
-Las dos listas se comparan **sin distinguir mayúsculas**, y eso no es un detalle
+Las tres listas se comparan **sin distinguir mayúsculas**, y eso no es un detalle
 cosmético: `register()` guarda el correo tal como lo escribió quien se registró,
 sin normalizarlo (`server.py:288`), así que en la base puede haber
 `QA@GrupoViter.com`. Quien escribe la lista de exclusión no tiene manera de
@@ -125,10 +134,85 @@ activación castiga al producto por las cuentas del equipo que se registraron
 para mirar y nunca jugaron. Cuántas se excluyeron sale en `excluidos_internos`
 y `cuentas_internas`.
 
-**Pendiente antes del corte:** alguien tiene que decidir *qué* cuentas son
-internas y marcarlas. No lo puedo decidir yo: no sé qué correos van a probar el
-juego en enero. Es una tarea de cinco minutos, no un bloqueo, pero si no se hace
-el número incluye al equipo.
+#### Quiénes son internos — decidido el 24 de octubre de 2026
+
+Lo decidió Gustavo en [BOS-356](/BOS/issues/BOS-356). Está escrito aquí, y no
+solo en el tablero, para que quien corra la consulta el día del corte no tenga
+que ir a buscarlo. Si la lista cambia, se cambia aquí en el mismo commit.
+
+- **Dominio permanente:** `viter.com.mx`.
+- **Correos exactos:** `gustavojimenezcerda@gmail.com` (Gustavo) y
+  `admin@cafecontrol.com` — este último es el admin que sembraba el
+  `POST /api/seed` que se borró en [BOS-206](/BOS/issues/BOS-206); va en la
+  lista por si sobrevive en algún entorno.
+- **Convención para cuentas de prueba:** toda cuenta creada para probar,
+  demostrar o sembrar Knowledge Wars se registra con etiqueta
+  `gustavojimenezcerda+kw<algo>@gmail.com`, y se marca `is_internal: true` **en
+  el mismo paso en que se crea**, no después.
+
+El día del corte, eso son estos dos comandos:
+
+```js
+// 1. marcar las cuentas de la lista (el mecanismo bueno, queda en la base)
+db.users.updateMany(
+  {email: {$regex: "^(gustavojimenezcerda@gmail\\.com|admin@cafecontrol\\.com)$",
+           $options: "i"}},
+  {$set: {is_internal: true}}
+)
+
+// 2. y las etiquetadas, si alguna se creó sin marcar
+db.users.updateMany(
+  {email: {$regex: "\\+kw", $options: "i"}},
+  {$set: {is_internal: true}}
+)
+```
+
+**Va con `$regex`/`$options: "i"` y no con `updateOne({email: "..."})` a
+propósito.** La coincidencia exacta es sensible a mayúsculas y `register()`
+guarda el correo sin normalizar (`server.py:288`): si la cuenta quedó como
+`Gustavojimenezcerda@gmail.com`, el `updateOne` no la encuentra, no falla, no
+avisa, y la cuenta cuenta como jugador. Es el mismo motivo por el que las listas
+por variable de entorno son insensibles a mayúsculas; el comando de la base
+tiene que ser consistente con ellas. Y `updateMany`, no `updateOne`, porque
+justamente puede haber más de una cuenta que coincida sin distinguir
+capitalización.
+
+El dominio `viter.com.mx` sale por la variable de entorno
+(`METRICA_EXCLUIR_DOMINIOS="viter.com.mx"`) y no por un `updateMany`, porque es
+permanente: no hay que volver a marcar a cada persona que entre al grupo.
+
+#### Las cuentas de prueba etiquetadas
+
+La convención de arriba —`gustavojimenezcerda+kw1@gmail.com`— tiene un hueco que
+hay que nombrar: **ninguno de los otros dos mecanismos de lista la atrapa.**
+`METRICA_EXCLUIR_CORREOS` es coincidencia exacta y habría que enumerar cada
+etiqueta una por una; `METRICA_EXCLUIR_DOMINIOS` es por sufijo y el sufijo es
+`@gmail.com`, donde viven los jugadores de verdad. Sin un tercer mecanismo, la
+única defensa es que alguien se acuerde de poner `is_internal` al crear la
+cuenta — disciplina, no mecanismo, y es lo primero que falla cuando hay prisa.
+
+De ahí la lista 4:
+
+```bash
+METRICA_EXCLUIR_PATRONES="+kw" python scripts/metrica_jugadores_activados.py
+```
+
+Busca la subcadena en cualquier parte del correo, sin anclas, sin distinguir
+mayúsculas, y las cuentas que caen se reportan en `cuentas_internas` y
+`excluidos_internos` igual que las otras.
+
+Dos cosas que importan de cómo está hecho:
+
+- El patrón es **texto literal, no una regex**: pasa por `re.escape` antes de
+  llegar a Mongo. `"+kw"` busca un `+` seguido de `kw`, no «una o más» de nada,
+  y un patrón con `.*` o un paréntesis suelto no tumba la consulta ni barre con
+  media base.
+- Es **deliberadamente grueso**: cualquier correo que contenga el patrón queda
+  fuera, incluido el de un jugador real que por casualidad lo tenga. Por eso el
+  patrón debe ser específico (`+kw`, no `kw`), y por eso sigue siendo el tercer
+  mecanismo en orden de preferencia y no el primero: lo que de verdad hay que
+  hacer es marcar `is_internal` al crear la cuenta. Esto es la red por si no se
+  hizo.
 
 ### 5. ¿Y un id de jugador que ya no tiene cuenta? → No cuenta.
 
@@ -201,8 +285,9 @@ db.matches.aggregate([
 ```
 
 Esta versión solo respeta las exclusiones internas marcadas con `is_internal`;
-las listas por correo y por dominio son del script. Si hace falta, se agregan al
-`$match` final.
+las tres listas (correo, dominio, patrón) son del script. Si hace falta, se
+agregan al `$match` final — o, más simple, se corren los dos `updateMany` de la
+decisión 4 antes de pegar el pipeline, y entonces `is_internal` ya las cubre.
 
 Los índices que ya existen la cubren: `backend/server.py:90-92` crea
 `(player_a_id, status)`, `(player_b_id, status)` y `(status, ended_at)`. El
@@ -210,7 +295,7 @@ Los índices que ya existen la cubren: `backend/server.py:90-92` crea
 
 ## Cómo se probó
 
-Contra MongoDB **real**, local (8.3.11), con datos sembrados a mano: 18 pruebas,
+Contra MongoDB **real**, local (8.3.11), con datos sembrados a mano: 20 pruebas,
 una base nueva por prueba, borrada al terminar. Costo $0.
 
 ```bash
@@ -226,8 +311,10 @@ Lo que cubren las pruebas, una por decisión: base vacía, registrados sin jugar
 no contar dos veces al mismo jugador, ignorar `pending`/`active`/`cancelled`/
 `expired`/`rejected`, contar la rendición, id huérfano, `player_id` nulo,
 autopartida (excluida, incluida con la bandera, y que no borre una partida real),
-cuenta interna por bandera / por correo / por dominio, ventana por `ended_at` con
-`--hasta` exclusivo, y la equivalencia con el pipeline de arriba.
+cuenta interna por bandera / por correo / por dominio / por patrón (incluido que
+el patrón sea literal y no una regex, y que sin la variable de entorno no
+excluya a nadie), ventana por `ended_at` con `--hasta` exclusivo, y la
+equivalencia con el pipeline de arriba.
 
 `test_escenario_del_corte` es el ensayo general: ocho cuentas, nueve partidas con
 de todo (repetidas, autopartida, cuenta interna, rival borrado, en curso,
