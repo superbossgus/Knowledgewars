@@ -6,7 +6,6 @@ FastAPI backend with WebSocket support for real-time duels
 import os
 import asyncio
 import hmac
-import httpx
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -77,7 +76,9 @@ subscriptions_col = db["subscriptions"]
 purchases_col = db["purchases"]
 coupons_col = db["coupons"]
 payment_transactions_col = db["payment_transactions"]
-user_sessions_col = db["user_sessions"]  # For Google OAuth sessions
+# Solo se lee y se borra. Nada la escribe desde que se quito el login con
+# Google (BOS-350); ver la nota en la seccion de auth.
+user_sessions_col = db["user_sessions"]
 password_resets_col = db["password_resets"]  # For password recovery
 admin_users_col = db["admin_users"]  # Admin panel users
 
@@ -202,10 +203,11 @@ manager = ConnectionManager()
 #     `error_description` termine reflejando el token recibido.
 #
 # El reto se manda solo en los 401 de recurso protegido (`get_current_user` y
-# `verify_admin`). Los 401 de `/api/auth/login` y `/api/auth/google/session` son
-# de *intercambio de credencial*, no de recurso protegido: ahi no hay token
-# Bearer que reintentar, y anunciar el esquema mandaria al cliente a repetir el
-# login con un token -- ver el comentario en cada uno.
+# `verify_admin`). Los 401 de `/api/auth/login` son de *intercambio de
+# credencial*, no de recurso protegido: ahi no hay token Bearer que reintentar,
+# y anunciar el esquema mandaria al cliente a repetir el login con un token --
+# ver el comentario en el endpoint. (`/api/auth/google/session` tenia el mismo
+# reparto; se quito en BOS-350.)
 BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
@@ -230,7 +232,9 @@ async def get_current_user(
         except:
             pass
     
-    # Then try session cookie (Google OAuth)
+    # Luego el cookie de sesion. Lo emitia el login con Google, que se quito en
+    # BOS-350; se sigue aceptando para no expulsar a una sesion que ya este
+    # viva en el navegador de alguien. Nada emite cookies nuevos.
     if session_token:
         session = user_sessions_col.find_one({"session_token": session_token}, {"_id": 0})
         if session:
@@ -339,9 +343,20 @@ async def login(credentials: UserLogin):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Check if user registered with Google (no password)
+    # Cuentas sin contrasena: son las que se dieron de alta con Google antes de
+    # que se quitara ese camino (BOS-350). Ya no se les puede decir "usa
+    # Google", porque Google ya no existe aqui. El rescate es ponerse una
+    # contrasena por "olvide mi contrasena", que les manda el codigo al mismo
+    # correo con el que entraban.
     if not user.get("password"):
-        raise HTTPException(status_code=400, detail="Please use Google sign-in for this account")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Esta cuenta se creo con Google Sign-In, que ya no esta "
+                "disponible. Usa \"Olvide mi contrasena\" con este mismo correo "
+                "para ponerle una contrasena."
+            ),
+        )
     
     if not verify_password(credentials.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -371,125 +386,34 @@ async def login(credentials: UserLogin):
 
 
 # ============================================================================
-# GOOGLE OAUTH ENDPOINTS (Emergent Auth)
+# EL LOGIN CON GOOGLE SE QUITO (BOS-350, opcion A)
 # ============================================================================
-
-class GoogleSessionRequest(BaseModel):
-    session_id: str
-    remember_me: bool = False
-
-
-@app.post("/api/auth/google/session")
-async def process_google_session(data: GoogleSessionRequest, response: Response):
-    """
-    Process Google OAuth session from Emergent Auth.
-    Exchange session_id for user data and create local session.
-    """
-    try:
-        # Call Emergent Auth to get session data
-        async with httpx.AsyncClient() as http_client:
-            auth_response = await http_client.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-                headers={"X-Session-ID": data.session_id},
-                timeout=10.0
-            )
-        
-        # Tambien sin reto Bearer, por lo mismo que el login: aqui se canjea un
-        # `session_id` de Google por una sesion local. El 401 dice que ese
-        # session_id no sirve, no que falte un access token (BOS-249).
-        if auth_response.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session")
-        
-        google_data = auth_response.json()
-        email = google_data.get("email")
-        name = google_data.get("name", "Player")
-        picture = google_data.get("picture", "")
-        
-        if not email:
-            raise HTTPException(status_code=400, detail="Email not provided by Google")
-        
-        # Find or create user
-        user = users_col.find_one({"email": email})
-        
-        if user:
-            # Update existing user with Google info
-            users_col.update_one(
-                {"_id": user["_id"]},
-                {"$set": {
-                    "last_seen": datetime.utcnow(),
-                    "google_picture": picture,
-                    "auth_provider": user.get("auth_provider", "google")
-                }}
-            )
-            user_id = str(user["_id"])
-        else:
-            # Create new user from Google data with game credits
-            user_doc = {
-                "email": email,
-                "display_name": name.split()[0] if name else "Player",
-                "google_picture": picture,
-                "country_code": "us",  # Default, user can change later
-                "favorite_topic": "General Knowledge",
-                "language": "es",
-                "dnd_enabled": False,
-                "elo_rating": 500,
-                "league": "plata",
-                "created_at": datetime.now(timezone.utc),
-                "last_seen": datetime.now(timezone.utc),
-                "wins": 0,
-                "losses": 0,
-                "total_duels": 0,
-                "auth_provider": "google",
-                # New monetization system: game credits
-                "games_remaining": 5,  # 5 free games for new users
-                "total_games_purchased": 0,
-                "coupons_used": []
-            }
-            result = users_col.insert_one(user_doc)
-            user = user_doc
-            user["_id"] = result.inserted_id
-            user_id = str(result.inserted_id)
-        
-        # Create local session with appropriate expiry
-        local_session_token = f"kw_{uuid.uuid4().hex}"
-        
-        # If remember_me is True, session lasts forever (100 years)
-        # Otherwise, use standard 7 days
-        if data.remember_me:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=36500)  # ~100 years
-        else:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-        
-        user_sessions_col.insert_one({
-            "user_id": user_id,
-            "session_token": local_session_token,
-            "expires_at": expires_at,
-            "created_at": datetime.now(timezone.utc),
-            "remember_me": data.remember_me
-        })
-        
-        # Set session cookie
-        response.set_cookie(
-            key="session_token",
-            value=local_session_token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            path="/",
-            max_age=int((expires_at - datetime.now(timezone.utc)).total_seconds())
-        )
-        
-        # Also return JWT token for backward compatibility
-        jwt_token = create_access_token({"user_id": user_id})
-        
-        return {
-            "success": True,
-            "token": jwt_token,
-            "user": serialize_doc(user)
-        }
-        
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to verify Google session: {str(e)}")
+#
+# Aqui vivia `POST /api/auth/google/session`, que canjeaba un `session_id`
+# contra `https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data`.
+# Emergent es la plataforma que la unidad dejo en abril de 2026, y el flujo
+# colgaba de dos dominios suyos: la pantalla de consentimiento
+# (`auth.emergentagent.com`, que ya contesta 404 en la ruta que usaba el
+# frontend) y ese canje. Las sondas del 24 de octubre de 2026 estan en
+# `ALTA_DE_USUARIO.md`.
+#
+# Lo que se quito no era "el login con Google": era confiar en que un tercero
+# que no nos debe nada nos diga quien es cada usuario. Quien controlara ese
+# dominio controlaba quien entra a Knowledge Wars.
+#
+# El alta por correo y contrasena (`/api/auth/register`) no dependia de nada de
+# eso y quedo como el unico camino de alta.
+#
+# Si se quiere Google de vuelta, es OAuth directo contra Google (opcion B del
+# documento) y va **despues** de BOS-136, porque toca la emision del JWT.
+#
+# Lo que sigue en pie a proposito: `get_current_user` todavia acepta el cookie
+# `session_token` y `/api/auth/logout` todavia lo borra. Ya nada emite esos
+# cookies -- este endpoint era el unico que insertaba en `user_sessions` -- asi
+# que la coleccion solo se vacia. Se deja para no expulsar a una sesion viva
+# que siga en el navegador de alguien (las de `remember_me` duraban 100 anos).
+# Se puede borrar junto con `user_sessions_col` cuando se confirme que la
+# coleccion esta vacia en produccion.
 
 
 @app.get("/api/auth/me")
@@ -553,10 +477,11 @@ async def forgot_password(data: PasswordResetRequest):
         # Don't reveal if email exists or not for security
         return {"success": True, "message": "Si el email existe, recibirás instrucciones"}
     
-    # Check if user uses Google auth (no password to reset)
-    if user.get("auth_provider") == "google" and not user.get("password"):
-        return {"success": True, "message": "Esta cuenta usa Google Sign-In. Por favor inicia sesión con Google."}
-    
+    # Aqui habia una rama que a las cuentas de Google les contestaba "usa
+    # Google Sign-In" en vez de mandarles el codigo. Quitada en BOS-350: ese
+    # era justo el renglon que las dejaba encerradas al quitar Google. Son las
+    # unicas cuentas sin contrasena que existen, y este es su unico rescate.
+
     # Delete any existing reset tokens for this email
     password_resets_col.delete_many({"email": data.email})
     
@@ -634,10 +559,16 @@ async def reset_password(data: PasswordResetConfirm):
     if len(data.new_password) < 6:
         raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
     
-    # Update password
+    # Update password. `auth_provider` pasa a "email" porque despues de esto es
+    # verdad: la cuenta entra con correo y contrasena (BOS-350). Dejarlo en
+    # "google" seria mentir sobre un proveedor que ya no existe aqui, y es el
+    # campo que mira cualquier reporte que separe cuentas por origen.
     users_col.update_one(
         {"email": reset_doc["email"]},
-        {"$set": {"password": hash_password(data.new_password)}}
+        {"$set": {
+            "password": hash_password(data.new_password),
+            "auth_provider": "email",
+        }}
     )
     
     # Mark token as used
