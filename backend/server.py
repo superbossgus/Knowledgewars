@@ -121,7 +121,7 @@ password_reset_requests_col.create_index([("key", 1), ("created_at", DESCENDING)
 coupons_col.create_index("code", unique=True)
 
 
-def asegurar_indice_ttl(col, campo: str) -> bool:
+def asegurar_indice_ttl(col, campo: str, segundos: int = 0) -> bool:
     """Deja el indice de `campo` como un TTL que borra el documento al vencer.
 
     El indice de `expires_at` de `password_resets` era un indice normal: no
@@ -131,23 +131,34 @@ def asegurar_indice_ttl(col, campo: str) -> bool:
     El oraculo se cierra en el endpoint -- esto es la otra mitad: que el
     documento muerto desaparezca solo.
 
-    `expireAfterSeconds=0` significa "borra cuando la fecha de ese campo ya
-    paso". Mongo lo barre cada ~60 segundos, asi que **no es inmediato** y no
-    sustituye la comprobacion de expiracion del codigo; solo acota cuanto vive
-    la basura.
+    `segundos` es el `expireAfterSeconds` del indice: cuanto se espera DESPUES de
+    la fecha del campo antes de borrar.
+
+      - `0` sirve cuando el campo **ya es** la fecha de vencimiento
+        (`expires_at`): "borra cuando esa fecha ya paso".
+      - Para un campo que es la fecha de creacion (`created_at`) hay que pasar la
+        vida que se le quiere dar. `0` ahi borraria el renglon recien escrito
+        (BOS-361), que en el caso de los cubos de cuota equivale a apagar los
+        topes.
+
+    Mongo lo barre cada ~60 segundos, asi que **no es inmediato** y no sustituye
+    ninguna comprobacion de vigencia en el codigo; solo acota cuanto vive la
+    basura.
 
     Mongo rechaza `create_index` sobre llaves que ya tienen un indice con otras
     opciones (85 IndexOptionsConflict / 86 IndexKeySpecsConflict). Eso es
     exactamente lo que pasa al desplegar esto sobre una base existente, que ya
-    tiene el indice sin TTL: hay que tirar el viejo primero.
+    tiene el indice sin TTL o con otro `expireAfterSeconds`: hay que tirar el
+    viejo primero. mongomock levanta el mismo `OperationFailure` pero sin `code`,
+    asi que `None` se trata como conflicto tambien.
     """
     try:
-        col.create_index(campo, expireAfterSeconds=0)
+        col.create_index(campo, expireAfterSeconds=segundos)
     except OperationFailure as exc:
-        if exc.code not in (85, 86):
+        if exc.code not in (85, 86, None):
             raise
         col.drop_index(f"{campo}_1")
-        col.create_index(campo, expireAfterSeconds=0)
+        col.create_index(campo, expireAfterSeconds=segundos)
     return True
 
 
@@ -155,6 +166,22 @@ def asegurar_indice_ttl(col, campo: str) -> bool:
 # tambien implementa TTL (y lo aplica al leer, no cada minuto), asi que esto es
 # True en los dos modos.
 PASSWORD_RESETS_TTL_ACTIVO = asegurar_indice_ttl(password_resets_col, "expires_at")
+
+# Vida de un renglon de cubo de cuota. `reset_quota_retry_after` solo poda la
+# llave que se esta consultando, asi que los renglones de una llave que no se
+# vuelve a consultar nunca -- la IP de paso, el correo que pidio una vez -- se
+# quedaban para siempre. `verify-reset-code` escribe un renglon por llamada
+# (BOS-359), asi que la coleccion crece mucho mas rapido que antes y el cluster
+# es un M0 de 512 MB (BOS-361).
+#
+# Tiene que ser >= la ventana mas larga de todos los cubos, o el TTL borraria
+# renglones que todavia cuentan para un tope. Hoy la mas larga es la de IP, 60
+# minutos; las pruebas lo exigen contra las constantes de mas abajo, que viven
+# junto a los endpoints y no se pueden leer desde aqui.
+RESET_REQUESTS_TTL_SEGUNDOS = 3600
+PASSWORD_RESET_REQUESTS_TTL_ACTIVO = asegurar_indice_ttl(
+    password_reset_requests_col, "created_at", RESET_REQUESTS_TTL_SEGUNDOS
+)
 
 # Services
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -551,10 +578,25 @@ RESET_CODE_ATTEMPTS_WINDOW_MINUTES = 5
 # Tope propio de `verify-reset-code`, por IP y solo por IP (BOS-359).
 #
 # Sin el, quemar el rescate de alguien costaba cinco llamadas y cero espera,
-# porque el unico tope que habia era el de intentos por token. Un usuario
-# legitimo necesita una llamada, dos o tres si teclea mal; 30 por hora deja
-# margen de sobra incluso para un salon de evento y aun asi acota lo que una
-# sola maquina puede quemar.
+# porque el unico tope que habia era el de intentos por token.
+#
+# **El numero sale del tope de forgot por IP, no del aire** (BOS-361). Estaba en
+# 30 y eso era mas chico que el trafico legitimo que el propio
+# `RESET_REQUESTS_PER_IP = 20` deja generar desde esa misma IP: 20 personas
+# detras de un NAT pueden pedir su codigo, y cada una necesita 1 a 3 llamadas de
+# verify (una si teclea bien, dos o tres si se equivoca), o sea hasta 60. Medido
+# sobre un salon de 20 cuentas con dos tecleos malos cada una, solo 10 personas
+# completaban el rescate: el corte llegaba antes por verify que por forgot. Y al
+# que quedaba fuera le tocaba esperar hasta una hora con un codigo en la mano que
+# vive 15 minutos -- se le vencia antes de que la ventana se liberara, y al pedir
+# otro se topaba con el cubo de IP de forgot. Asi que 3 x 20 = 60, el techo del
+# trafico legitimo, mas margen: 90.
+#
+# No debilita la fuerza bruta. Contra una cuenta concreta el que manda es el
+# presupuesto por token -- 15 intentos en los 15 minutos de vida, por la ventana
+# movil --, y ese no se mueve. Este tope solo acota a cuantas cuentas DISTINTAS
+# puede golpear una sola maquina por hora; pasar de 2 a 6 tokens por hora por IP
+# no cambia la aritmetica de 10^6.
 #
 # **No hay cubo por correo aqui, y es a proposito.** Seria un lever de
 # denegacion nuevo, no una mitigacion: el presupuesto de intentos ya es por
@@ -562,7 +604,7 @@ RESET_CODE_ATTEMPTS_WINDOW_MINUTES = 5
 # correo encima solo le daria a un tercero la forma de dejar al dueno sin poder
 # verificar **ni con un token nuevo** -- peor que lo que esto arregla, porque
 # pedir otro codigo no limpiaria ese cubo.
-RESET_VERIFY_PER_IP = 30
+RESET_VERIFY_PER_IP = 90
 RESET_VERIFY_PER_IP_WINDOW_MINUTES = 60
 
 # Y sin tope de solicitudes se pueden pedir codigos en bucle, que es la otra
@@ -811,10 +853,31 @@ async def verify_reset_code(email: str, code: str, request: Request):
     enviado_bytes = str(code or "").encode("utf-8")
     guardado_bytes = str(reset_doc.get("code") or "").encode("utf-8")
     if not hmac.compare_digest(enviado_bytes, guardado_bytes):
-        fallos.append(ahora)
+        # El fallo se agrega con `$push` y la ventana se poda con `$pull` por
+        # fecha: **ninguna de las dos escrituras depende de la lista que se
+        # leyo**. Antes esto era un `$set` de `fallos`, la lista calculada en
+        # Python -- un read-modify-write (BOS-361). Dos peticiones que leyeran
+        # antes de que la otra escribiera se pisaban el renglon, asi que el
+        # contador que de verdad gatea el tope de 5 podia contar de menos y
+        # dejarlo pasar. Hoy no era explotable por arquitectura, no por diseno:
+        # entre la lectura y la escritura de esta funcion no hay ni un `await`,
+        # asi que el event loop no puede intercalar dos handlers y con un solo
+        # worker el read-modify-write corria atomico. Se volvia real con mas de
+        # un worker de uvicorn o mas de una instancia de Render, que es justo lo
+        # que pasa al escalar.
+        #
+        # El `$push` va PRIMERO y el `$pull` despues, no al reves: Mongo no
+        # admite las dos en la misma escritura (conflictuan sobre el mismo
+        # campo), y en este orden nunca existe un instante en que el conteo sea
+        # mas bajo que la verdad. El `$pull` solo quita fechas de antes de la
+        # ventana, que ya no contaban para el tope.
         password_resets_col.update_one(
             {"token": reset_doc["token"]},
-            {"$set": {"failed_attempts": fallos}, "$inc": {"attempts": 1}},
+            {"$push": {"failed_attempts": ahora}, "$inc": {"attempts": 1}},
+        )
+        password_resets_col.update_one(
+            {"token": reset_doc["token"]},
+            {"$pull": {"failed_attempts": {"$lt": desde}}},
         )
         raise invalido
 
