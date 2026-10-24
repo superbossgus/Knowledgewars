@@ -43,18 +43,44 @@ llamara al endpoint con un correo ajeno se quedaba con la cuenta — y el token
 solo bastaba, porque `/api/auth/reset-password` no pide el código. Ya no sale
 ninguno de los dos: el código solo viaja por correo.
 
-Lo que cambió:
+Lo que cambió, en dos tandas. La primera (BOS-353, PR #10) cerró el take-over:
 
 - el código se genera con `secrets`, no con `random`;
-- cinco intentos fallidos en `verify-reset-code` **queman el token**: después ni
-  el código correcto sirve;
+- ni el código ni el `reset_token` salen en la respuesta HTTP: el código solo
+  viaja por correo, y la respuesta es idéntica para un correo que existe y uno
+  que no;
+- cinco intentos fallidos en `verify-reset-code` agotaban el token;
 - `forgot-password` tiene tope de solicitudes: 3 por correo cada 15 minutos y
   20 por IP cada hora, con `429` y `Retry-After`;
 - el envío vive en `backend/mailer.py` y habla **SMTP**, no la API de un
   proveedor concreto, así que elegir proveedor es poner variables de entorno.
 
+La segunda (BOS-359, PR #11) cerró tres huecos que la primera dejó abiertos:
+
+- **`verify-reset-code` ya no dice si un correo está registrado.** El código
+  vencido de una cuenta real y un correo que no existe contestan el mismo `400`
+  byte por byte, y `expires_at` pasó a ser índice **TTL**, así que el documento
+  vencido desaparece solo en vez de esperar la siguiente solicitud.
+- **El quinto fallo ya no quema el token.** Los cinco intentos se cuentan en una
+  ventana móvil de 5 minutos, más corta que los 15 de vida del token, así que el
+  presupuesto se repone. Lo que se retiró era un lever de denegación: un tercero
+  que solo supiera el correo podía dejar la cuenta sin rescate indefinidamente,
+  a cinco llamadas y cero espera por token. El costo es que el presupuesto por
+  token sube de 5 a 15 intentos — 15 en 10⁶, y 45 por correo cada cuarto de
+  hora. Ese intercambio se aprobó con los números escritos en BOS-360.
+- **`verify-reset-code` estrena su propio tope: 30 por IP cada hora**, mirado
+  antes de tocar la base, así que el `429` es idéntico para un correo que existe
+  y uno que no. No hay tope por correo a propósito: el presupuesto de intentos
+  ya es por correo (solo vive un token por correo a la vez), y un cubo por
+  correo sí se podría apuntar a una víctima concreta. Un tope por IP no.
+- **Una solicitud rechazada por el tope de IP ya no gasta cuota del tope por
+  correo.** `forgot-password` mira los dos cubos y registra después, así que el
+  usuario del salón de evento que choca con el tope de IP conserva sus tres
+  solicitudes enteras.
+
 Fijado por `backend/tests/test_recuperacion_de_contrasena.py`
-(95 verificaciones, en verde con mongomock y contra Mongo real).
+(**123 verificaciones**, en verde con mongomock y contra Mongo real, reproducidas
+contra `main` ya mergeado).
 
 **Esto es lo que falta para poder abrir el alta:** sin `SMTP_HOST` y `SMTP_FROM`
 configurados no sale ningún correo, y entonces el rescate no funciona — el
@@ -62,6 +88,29 @@ endpoint contesta lo mismo, pero el usuario no recibe nada. Es a propósito:
 entre «no se puede recuperar» y «cualquiera se toma la cuenta», se elige lo
 primero. **Mientras no haya cuenta de envío, no se da de alta al primer usuario
 real**, porque una cuenta cuya contraseña se olvide queda perdida.
+
+### Lo que sigue del rescate, y por qué el siguiente paso no es otro tope
+
+Dos cosas quedan abiertas. Ninguna bloquea el alta por sí sola; la cuenta de
+envío de arriba sigue siendo la única condición dura.
+
+- **BOS-361 — tres bordes del PR #11.** El tope de verify (30 por IP cada hora)
+  es más chico que el tráfico legítimo que el tope de `forgot-password` (20 por
+  IP cada hora) deja generar desde esa misma IP: medido, 10 de 20 personas de un
+  salón de evento completan el rescate y la 11 espera una hora con un código que
+  vive 15 minutos. Además la ventana de intentos se reescribe entera desde
+  Python (read-modify-write; hoy no es explotable porque el handler no tiene un
+  solo `await`, pero sí con más de un worker), y `password_reset_requests_col`
+  no tiene TTL, así que acumula renglones.
+- **BOS-362 — el rescate por enlace con token de 128 bits.** Es el arreglo de
+  fondo: un token de 128 bits no se adivina, así que no necesita tope de
+  intentos, y sin tope de intentos no hay nada que un tercero pueda quemar. Eso
+  borra de raíz el oráculo de existencia, el bloqueo del rescate y el
+  dimensionamiento de los dos topes. Cambia la **pantalla de recuperación**, así
+  que la decisión va con un plan de prueba de navegador (como BOS-355) y no de
+  corrido. **Mientras eso no se decida, no se agregan más topes sobre el código
+  de 6 dígitos:** el secreto tiene 10⁶ combinaciones y el siguiente movimiento
+  en ese camino es cambiar el secreto, no el tope.
 
 ## Había dos caminos de alta, y solo uno era nuestro
 
