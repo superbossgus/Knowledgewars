@@ -16,9 +16,9 @@ Lo que esta prueba fija, en capas:
   2. el codigo lo genera `secrets`, no `random`. Se comprueba de dos formas: el
      AST de `server.py` no nombra `random` en ninguna parte, y una sonda sobre
      `secrets.randbelow` confirma que de ahi sale cada codigo
-  3. **cinco intentos fallidos queman el token**: despues ni el codigo correcto
-     sirve, y `reset-password` tampoco acepta ese token. Cuatro fallos seguidos
-     de un acierto si pasan
+  3. **cinco intentos fallidos agotan la ventana**: despues ni el codigo
+     correcto sirve. Cuatro fallos seguidos de un acierto si pasan. El token
+     **no** se quema (ver capa 8)
   4. `forgot-password` tiene tope por correo y por IP: el cuarto intento con el
      mismo correo en 15 minutos contesta 429 con `Retry-After`, y otro correo
      sigue pasando
@@ -29,6 +29,15 @@ Lo que esta prueba fija, en capas:
      desarrollo, y la bandera esta apagada por omision
   7. el `mailer` no manda nada sin configurar, no acepta una direccion con un
      salto de linea (inyeccion de cabeceras) y lleva el codigo en el cuerpo
+  8. los tres huecos de BOS-359, que el PR anterior dejo abiertos:
+     - `verify-reset-code` ya **no** dice si un correo esta registrado: el
+       codigo vencido y el correo que no existe contestan el mismo 400 byte por
+       byte, y `expires_at` es un indice TTL
+     - un tercero ya **no** puede dejar la cuenta sin rescate sabiendo solo el
+       correo: la ventana de intentos se repone y el token no se quema, y
+       `verify-reset-code` tiene su propio tope por IP
+     - una solicitud rechazada por el tope de IP ya **no** gasta cuota del tope
+       por correo
 
 Lo que NO toca este cambio, y sigue en verde aqui: los 15 minutos de
 expiracion, el uso unico del token y la respuesta igual para un correo que no
@@ -285,7 +294,7 @@ def capa_2_el_codigo_sale_de_secrets():
 def capa_3_los_intentos_fallidos_queman_el_token():
     print()
     print("=" * 72)
-    print("Capa 3 -- cinco intentos fallidos queman el token")
+    print("Capa 3 -- cinco intentos fallidos agotan la ventana (sin quemar el token)")
     print("=" * 72)
     limpiar_topes()
 
@@ -301,6 +310,11 @@ def capa_3_los_intentos_fallidos_queman_el_token():
         server.RESET_CODE_MAX_ATTEMPTS == 5,
         str(server.RESET_CODE_MAX_ATTEMPTS),
     )
+    ok(
+        "y se cuentan en una ventana de 5 minutos, mas corta que el token (BOS-359)",
+        server.RESET_CODE_ATTEMPTS_WINDOW_MINUTES == 5,
+        str(server.RESET_CODE_ATTEMPTS_WINDOW_MINUTES),
+    )
 
     for intento in range(1, 6):
         res = client.post(f"/api/auth/verify-reset-code?email={correo}&code={malo}")
@@ -312,43 +326,41 @@ def capa_3_los_intentos_fallidos_queman_el_token():
         guardado = server.password_resets_col.find_one({"token": token})
         ok(
             f"el intento {intento} quedo contado en la base",
-            guardado.get("attempts") == intento,
-            repr(guardado.get("attempts")),
+            guardado.get("attempts") == intento
+            and len(guardado.get("failed_attempts") or []) == intento,
+            repr((guardado.get("attempts"), len(guardado.get("failed_attempts") or []))),
         )
 
-    quemado = server.password_resets_col.find_one({"token": token})
-    ok(
-        "al quinto fallo el token queda marcado como usado (quemado)",
-        quemado.get("used") is True,
-        repr(quemado.get("used")),
-    )
-
-    # Y ahora el codigo CORRECTO tampoco sirve. Esto es el punto entero: un
-    # codigo de 6 digitos sin tope de intentos no es un secreto.
+    # Con la ventana agotada, el codigo CORRECTO tampoco sirve. Esto es el punto
+    # entero del tope: un codigo de 6 digitos sin tope de intentos no es un
+    # secreto.
     res = client.post(f"/api/auth/verify-reset-code?email={correo}&code={codigo}")
     ok(
-        "despues de quemarlo, el codigo correcto tambien da 400",
+        "con la ventana agotada, el codigo correcto tambien da 400",
         res.status_code == 400,
         res.text[:150],
     )
     ok(
-        "el 400 del token quemado no dice que esta quemado",
-        "intent" not in res.text.lower() and "quemad" not in res.text.lower(),
+        "el 400 de la ventana agotada no dice que lo esta",
+        "intent" not in res.text.lower() and "ventana" not in res.text.lower(),
         res.text[:150],
     )
 
-    # Ni el token sirve para cambiar la contrasena por su cuenta.
-    res = client.post(
-        "/api/auth/reset-password", json={"token": token, "new_password": NUEVA}
-    )
+    # Pero el token NO queda quemado (BOS-359): quemarlo era lo que le permitia
+    # a un tercero dejar la cuenta sin rescate sabiendo solo el correo. El
+    # presupuesto se repone al pasar la ventana, y la capa 8 lo prueba.
+    agotado = server.password_resets_col.find_one({"token": token})
     ok(
-        "reset-password rechaza el token quemado -> 400",
-        res.status_code == 400,
-        res.text[:150],
+        "el token NO queda quemado al quinto fallo (BOS-359)",
+        agotado.get("used") is False,
+        repr(agotado.get("used")),
     )
+    # Que el token siga vivo no le sirve a quien golpeo los cinco intentos: el
+    # token no sale nunca por HTTP sin el codigo correcto (capa 1), asi que el
+    # atacante del caso de arriba no lo tiene. La contrasena no se movio.
     usuario = server.users_col.find_one({"email": correo})
     ok(
-        "y la contrasena de la cuenta no se movio",
+        "la contrasena de la cuenta no se movio con los cinco fallos",
         server.verify_password(CONTRASENA, usuario["password"]),
     )
 
@@ -376,8 +388,9 @@ def capa_3_los_intentos_fallidos_queman_el_token():
     guardado = server.password_resets_col.find_one({"token": doc["token"]})
     ok(
         "y esos intentos tambien se contaron (no son gratis)",
-        guardado.get("attempts") == 5 and guardado.get("used") is True,
-        repr({"attempts": guardado.get("attempts"), "used": guardado.get("used")}),
+        guardado.get("attempts") == 5
+        and len(guardado.get("failed_attempts") or []) == 5,
+        repr((guardado.get("attempts"), len(guardado.get("failed_attempts") or []))),
     )
 
     # Cuatro fallos y un acierto: el tope no estorba a quien se equivoca.
@@ -712,6 +725,311 @@ def capa_7_el_mailer():
     )
 
 
+# ---------------------------------------------------------------------------
+def capa_8_los_tres_huecos_de_bos_359():
+    """Los tres huecos que dejo abierto el PR del rescate (BOS-359).
+
+    Ninguno era un take-over -- el PR cerro ese --, pero los tres tenian que
+    estar cerrados antes de dar de alta al primer usuario real.
+    """
+    print()
+    print("=" * 72)
+    print("Capa 8 -- BOS-359: oraculo de existencia, bloqueo del rescate, cuota cruzada")
+    print("=" * 72)
+
+    # --- 8a. `verify-reset-code` ya no dice si un correo esta registrado -----
+    #
+    # La consulta busca por `{email, used: False}`, sin el codigo, asi que con el
+    # correo y cualquier codigo se llega a la rama de expiracion. Esa rama
+    # contestaba "El código ha expirado" -- un texto distinto del 400 generico --
+    # y el documento vencido se queda en la base, asi que el oraculo quedaba fijo
+    # para cualquier cuenta que pidiera un codigo y lo dejara vencer.
+    limpiar_topes()
+    registrado = "capa8-registrado-bos359@kwtest-local.com"
+    fantasma = "capa8-fantasma-bos359@kwtest-local.com"
+    registrar(registrado)
+    _, doc = pedir_codigo(registrado, ip="10.8.0.1")
+    server.password_resets_col.update_one(
+        {"token": doc["token"]},
+        {"$set": {"expires_at": datetime.now(timezone.utc) - timedelta(minutes=1)}},
+    )
+
+    res_registrado = client.post(
+        "/api/auth/verify-reset-code", params={"email": registrado, "code": "000000"}
+    )
+    res_fantasma = client.post(
+        "/api/auth/verify-reset-code", params={"email": fantasma, "code": "000000"}
+    )
+    ok(
+        "un codigo vencido y un correo que no existe dan el mismo status",
+        res_registrado.status_code == res_fantasma.status_code == 400,
+        f"{res_registrado.status_code} vs {res_fantasma.status_code}",
+    )
+    ok(
+        "y el MISMO cuerpo, byte por byte (ya no hay oraculo de existencia)",
+        res_registrado.content == res_fantasma.content,
+        f"{res_registrado.text[:90]} vs {res_fantasma.text[:90]}",
+    )
+    ok(
+        "el 400 del vencido no dice 'expirado' por su cuenta",
+        "ha expirado" not in res_registrado.text,
+        res_registrado.text[:120],
+    )
+    # Ojo con lo que prueba cada modo. Contra Mongo real el documento vencido
+    # TODAVIA esta en la base cuando se sondea (el TTL barre cada ~60 s), asi que
+    # ese run es el que demuestra el arreglo del endpoint. mongomock aplica el
+    # TTL al leer, asi que ahi el documento ya no esta y las dos respuestas
+    # coinciden por el otro camino. Las dos cosas son lo que se quiere.
+    vencido = server.password_resets_col.find_one({"token": doc["token"]})
+    ok(
+        "sondear un vencido no le gasta intentos a nadie "
+        "(o el TTL ya se lo llevo, o sigue intacto)",
+        vencido is None or (vencido.get("failed_attempts") or []) == [],
+        repr(vencido and vencido.get("failed_attempts")),
+    )
+    ok(
+        "pero si queda anotado en el cubo por IP de verify (ya cuesta algo)",
+        server.password_reset_requests_col.count_documents(
+            {"key": "verify_ip:testclient"}
+        )
+        >= 2,
+        str(
+            server.password_reset_requests_col.count_documents(
+                {"key": "verify_ip:testclient"}
+            )
+        ),
+    )
+
+    # El TTL es la otra mitad: el documento vencido no se queda para siempre.
+    # Antes `expires_at` era un indice normal y solo lo borraba la siguiente
+    # solicitud del mismo correo.
+    indices = server.password_resets_col.index_information()
+    ok(
+        "expires_at es un indice TTL (expireAfterSeconds=0)",
+        indices.get("expires_at_1", {}).get("expireAfterSeconds") == 0,
+        repr(indices.get("expires_at_1")),
+    )
+    ok(
+        "y server.py lo reporta activo",
+        server.PASSWORD_RESETS_TTL_ACTIVO is True,
+        repr(server.PASSWORD_RESETS_TTL_ACTIVO),
+    )
+
+    # --- 8b. un tercero ya no puede dejar la cuenta sin rescate -------------
+    #
+    # El tope de 5 intentos es por token. Mientras el quinto fallo quemaba el
+    # token, quemar el rescate de alguien costaba cinco llamadas y cero espera,
+    # y se repetia con cada token nuevo que la victima pidiera hasta agotarle su
+    # cuota de 3 solicitudes por 15 minutos. Ahora: (1) la ventana se repone, y
+    # (2) quemar cuesta cuota del tope por IP.
+    limpiar_topes()
+    victima = "capa8-victima-bos359@kwtest-local.com"
+    registrar(victima)
+    _, doc = pedir_codigo(victima, ip="10.8.0.2")
+    codigo = doc["code"]
+    token = doc["token"]
+    malo = "000000" if codigo != "000000" else "111111"
+
+    for _ in range(server.RESET_CODE_MAX_ATTEMPTS):
+        client.post("/api/auth/verify-reset-code", params={"email": victima, "code": malo})
+
+    res = client.post(
+        "/api/auth/verify-reset-code", params={"email": victima, "code": codigo}
+    )
+    ok(
+        "recien agotada la ventana, el codigo correcto de la victima da 400",
+        res.status_code == 400,
+        res.text[:150],
+    )
+    quemado = server.password_resets_col.find_one({"token": token})
+    ok(
+        "pero el token sigue vivo: used sigue en False",
+        quemado.get("used") is False,
+        repr(quemado.get("used")),
+    )
+
+    # Pasada la ventana, la victima recupera intentos. Se simula moviendo las
+    # fechas de los fallos al pasado, que es lo mismo que esperar.
+    atras = datetime.now(timezone.utc) - timedelta(
+        minutes=server.RESET_CODE_ATTEMPTS_WINDOW_MINUTES + 1
+    )
+    server.password_resets_col.update_one(
+        {"token": token},
+        {"$set": {"failed_attempts": [atras] * server.RESET_CODE_MAX_ATTEMPTS}},
+    )
+    res = client.post(
+        "/api/auth/verify-reset-code", params={"email": victima, "code": codigo}
+    )
+    ok(
+        "pasada la ventana, el codigo correcto de la victima SI pasa -> 200",
+        res.status_code == 200,
+        res.text[:200],
+    )
+    ok(
+        "y devuelve el token, asi que el rescate se completa",
+        res.status_code == 200 and bool(res.json().get("reset_token")),
+        res.text[:200],
+    )
+    ok(
+        "el acierto limpio la ventana de fallos",
+        (server.password_resets_col.find_one({"token": token}).get("failed_attempts") or [])
+        == [],
+    )
+
+    # Y el tope por IP: quemar tokens ajenos ya no es gratis.
+    limpiar_topes()
+    ok(
+        "el tope de verify es 30 por IP cada hora",
+        (server.RESET_VERIFY_PER_IP, server.RESET_VERIFY_PER_IP_WINDOW_MINUTES)
+        == (30, 60),
+        f"{server.RESET_VERIFY_PER_IP}/{server.RESET_VERIFY_PER_IP_WINDOW_MINUTES}",
+    )
+    for n in range(server.RESET_VERIFY_PER_IP):
+        res = client.post(
+            "/api/auth/verify-reset-code",
+            params={"email": fantasma, "code": "000000"},
+            headers={"X-Forwarded-For": "10.8.9.9"},
+        )
+        if res.status_code != 400:
+            ok(f"la llamada {n + 1} deberia ser 400, no {res.status_code}", False, res.text[:120])
+            break
+    res = client.post(
+        "/api/auth/verify-reset-code",
+        params={"email": fantasma, "code": "000000"},
+        headers={"X-Forwarded-For": "10.8.9.9"},
+    )
+    ok(
+        "la llamada 31 desde la misma IP -> 429",
+        res.status_code == 429,
+        f"{res.status_code}: {res.text[:120]}",
+    )
+    ok(
+        "el 429 de verify trae Retry-After",
+        res.headers.get("retry-after", "").isdigit()
+        and int(res.headers["retry-after"]) > 0,
+        repr(res.headers.get("retry-after")),
+    )
+    # El tope es por IP, no global: desde otra red el rescate legitimo pasa.
+    res = client.post(
+        "/api/auth/verify-reset-code",
+        params={"email": fantasma, "code": "000000"},
+        headers={"X-Forwarded-For": "10.8.9.10"},
+    )
+    ok(
+        "desde otra IP sigue pasando (es por IP, no un tope global) -> 400",
+        res.status_code == 400,
+        f"{res.status_code}: {res.text[:120]}",
+    )
+    # Y el 429 por IP no depende de que el correo exista: se mira antes de tocar
+    # la base, asi que no filtra nada.
+    res_fantasma_429 = client.post(
+        "/api/auth/verify-reset-code",
+        params={"email": fantasma, "code": "000000"},
+        headers={"X-Forwarded-For": "10.8.9.9"},
+    )
+    res_real_429 = client.post(
+        "/api/auth/verify-reset-code",
+        params={"email": victima, "code": "000000"},
+        headers={"X-Forwarded-For": "10.8.9.9"},
+    )
+    ok(
+        "el 429 de verify es igual para un correo que existe y uno que no",
+        res_fantasma_429.content == res_real_429.content,
+        f"{res_fantasma_429.text[:90]} vs {res_real_429.text[:90]}",
+    )
+
+    # --- 8c. una solicitud rechazada por IP no gasta cuota del correo -------
+    #
+    # `consume_reset_quota` registraba el renglon del cubo del correo antes de
+    # mirar el de IP. Con el cubo de IP lleno, una solicitud que contestaba 429
+    # dejaba 1 renglon en el cubo del correo: en el salon de evento, cada
+    # reintento de un usuario legitimo le comia una de sus 3 solicitudes.
+    limpiar_topes()
+    salon = "10.8.0.77"
+    afectado = "capa8-salon-bos359@kwtest-local.com"
+    registrar(afectado)
+    clave_correo = f"email:{afectado}"
+
+    # Se llena el cubo de IP con OTROS correos, para que el 429 venga del cubo
+    # de IP y no del suyo.
+    for n in range(server.RESET_REQUESTS_PER_IP):
+        client.post(
+            "/api/auth/forgot-password",
+            json={"email": f"capa8-relleno-{n}-bos359@kwtest-local.com"},
+            headers={"X-Forwarded-For": salon},
+        )
+    ok(
+        "el cubo de IP quedo lleno",
+        server.password_reset_requests_col.count_documents({"key": f"ip:{salon}"})
+        == server.RESET_REQUESTS_PER_IP,
+        str(server.password_reset_requests_col.count_documents({"key": f"ip:{salon}"})),
+    )
+    ok(
+        "y el usuario del salon todavia no gasto nada de su cuota",
+        server.password_reset_requests_col.count_documents({"key": clave_correo}) == 0,
+    )
+
+    for n in range(1, 4):
+        res = client.post(
+            "/api/auth/forgot-password",
+            json={"email": afectado},
+            headers={"X-Forwarded-For": salon},
+        )
+        ok(
+            f"su reintento {n} se rechaza por el cubo de IP -> 429",
+            res.status_code == 429,
+            f"{res.status_code}: {res.text[:120]}",
+        )
+    ok(
+        "y NINGUNO le gasto cuota de su cubo por correo (BOS-359)",
+        server.password_reset_requests_col.count_documents({"key": clave_correo}) == 0,
+        str(server.password_reset_requests_col.count_documents({"key": clave_correo})),
+    )
+
+    # Liberada la ventana de IP, le quedan sus 3 solicitudes enteras.
+    server.password_reset_requests_col.delete_many({"key": f"ip:{salon}"})
+    for n in range(1, 4):
+        res = client.post(
+            "/api/auth/forgot-password",
+            json={"email": afectado},
+            headers={"X-Forwarded-For": salon},
+        )
+        ok(
+            f"liberada la ventana de IP, su solicitud {n}/3 -> 200",
+            res.status_code == 200,
+            f"{res.status_code}: {res.text[:120]}",
+        )
+    res = client.post(
+        "/api/auth/forgot-password",
+        json={"email": afectado},
+        headers={"X-Forwarded-For": salon},
+    )
+    ok(
+        "la cuarta si se corta: el tope por correo sigue en pie",
+        res.status_code == 429,
+        f"{res.status_code}: {res.text[:120]}",
+    )
+
+    # El rechazo por su propio cubo tampoco alarga la ventana ni gasta cuota de
+    # IP: lo que ya decia el docstring, ahora cierto para los dos cubos.
+    antes_correo = server.password_reset_requests_col.count_documents({"key": clave_correo})
+    antes_ip = server.password_reset_requests_col.count_documents({"key": f"ip:{salon}"})
+    client.post(
+        "/api/auth/forgot-password",
+        json={"email": afectado},
+        headers={"X-Forwarded-For": salon},
+    )
+    ok(
+        "un 429 por el cubo del correo no registra nada en ningun cubo",
+        server.password_reset_requests_col.count_documents({"key": clave_correo})
+        == antes_correo
+        and server.password_reset_requests_col.count_documents({"key": f"ip:{salon}"})
+        == antes_ip,
+        f"correo {antes_correo}->{server.password_reset_requests_col.count_documents({'key': clave_correo})}, "
+        f"ip {antes_ip}->{server.password_reset_requests_col.count_documents({'key': f'ip:{salon}'})}",
+    )
+
+
 def finish():
     passed = sum(1 for good, _, _ in CHECKS if good)
     failed = [(label, detail) for good, label, detail in CHECKS if not good]
@@ -742,6 +1060,7 @@ def correr():
     capa_5_el_flujo_legitimo_corre_de_punta_a_punta()
     capa_6_el_camino_de_desarrollo_no_arranca_en_produccion()
     capa_7_el_mailer()
+    capa_8_los_tres_huecos_de_bos_359()
     return finish()
 
 

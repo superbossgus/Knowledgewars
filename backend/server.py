@@ -18,6 +18,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient, DESCENDING
+from pymongo.errors import OperationFailure
 from bson import ObjectId
 from pydantic import BaseModel
 
@@ -116,9 +117,44 @@ user_sessions_col.create_index("session_token", unique=True)
 user_sessions_col.create_index("user_id")
 password_resets_col.create_index("token", unique=True)
 password_resets_col.create_index("email")
-password_resets_col.create_index("expires_at")
 password_reset_requests_col.create_index([("key", 1), ("created_at", DESCENDING)])
 coupons_col.create_index("code", unique=True)
+
+
+def asegurar_indice_ttl(col, campo: str) -> bool:
+    """Deja el indice de `campo` como un TTL que borra el documento al vencer.
+
+    El indice de `expires_at` de `password_resets` era un indice normal: no
+    borraba nada. El documento de un rescate vencido se quedaba en la base hasta
+    que el mismo correo pidiera otro, y mientras estuviera ahi
+    `verify-reset-code` podia distinguirlo de un correo no registrado (BOS-359).
+    El oraculo se cierra en el endpoint -- esto es la otra mitad: que el
+    documento muerto desaparezca solo.
+
+    `expireAfterSeconds=0` significa "borra cuando la fecha de ese campo ya
+    paso". Mongo lo barre cada ~60 segundos, asi que **no es inmediato** y no
+    sustituye la comprobacion de expiracion del codigo; solo acota cuanto vive
+    la basura.
+
+    Mongo rechaza `create_index` sobre llaves que ya tienen un indice con otras
+    opciones (85 IndexOptionsConflict / 86 IndexKeySpecsConflict). Eso es
+    exactamente lo que pasa al desplegar esto sobre una base existente, que ya
+    tiene el indice sin TTL: hay que tirar el viejo primero.
+    """
+    try:
+        col.create_index(campo, expireAfterSeconds=0)
+    except OperationFailure as exc:
+        if exc.code not in (85, 86):
+            raise
+        col.drop_index(f"{campo}_1")
+        col.create_index(campo, expireAfterSeconds=0)
+    return True
+
+
+# Las pruebas lo leen para exigir que el TTL quedo puesto de verdad. mongomock
+# tambien implementa TTL (y lo aplica al leer, no cada minuto), asi que esto es
+# True en los dos modos.
+PASSWORD_RESETS_TTL_ACTIVO = asegurar_indice_ttl(password_resets_col, "expires_at")
 
 # Services
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -494,9 +530,40 @@ class PasswordResetConfirm(BaseModel):
 # Un codigo de 6 digitos son 10^6 combinaciones. Sin tope de intentos eso no es
 # un secreto: es una adivinanza con tiempo infinito, y 15 minutos de vida no
 # ayudan contra un script. Con 5 intentos por token, la probabilidad de acertar
-# es 5 en un millon, y el quinto fallo mata el token entero: ni el codigo
-# correcto sirve despues.
+# es 5 en un millon.
 RESET_CODE_MAX_ATTEMPTS = 5
+
+# Esos 5 intentos se cuentan en una ventana movil, y el token sobrevive
+# (BOS-359). Antes el quinto fallo lo quemaba -- `used: True` -- y eso era
+# justo lo que hacia practico dejar a una cuenta sin rescate: sabiendo solo el
+# correo, cinco llamadas y cero espera quemaban cada token que la victima
+# pidiera, hasta que se le acababa su propia cuota de solicitudes. No era un
+# take-over (la cuenta no se toma, y quien sepa la contrasena sigue entrando),
+# pero el camino de vuelta quedaba negado a eleccion de un tercero.
+#
+# El presupuesto de adivinanzas sigue siendo chico: el token vive 15 minutos,
+# asi que una ventana de 5 minutos da como mucho 3 tandas = 15 intentos por
+# token (15 en 10^6, una en 66,666), y `forgot-password` limita a 3 tokens por
+# correo cada 15 minutos. El tope por IP de abajo es lo que le cobra al que
+# quema tokens ajenos.
+RESET_CODE_ATTEMPTS_WINDOW_MINUTES = 5
+
+# Tope propio de `verify-reset-code`, por IP y solo por IP (BOS-359).
+#
+# Sin el, quemar el rescate de alguien costaba cinco llamadas y cero espera,
+# porque el unico tope que habia era el de intentos por token. Un usuario
+# legitimo necesita una llamada, dos o tres si teclea mal; 30 por hora deja
+# margen de sobra incluso para un salon de evento y aun asi acota lo que una
+# sola maquina puede quemar.
+#
+# **No hay cubo por correo aqui, y es a proposito.** Seria un lever de
+# denegacion nuevo, no una mitigacion: el presupuesto de intentos ya es por
+# correo (solo hay un token vivo por correo a la vez), asi que un cubo por
+# correo encima solo le daria a un tercero la forma de dejar al dueno sin poder
+# verificar **ni con un token nuevo** -- peor que lo que esto arregla, porque
+# pedir otro codigo no limpiaria ese cubo.
+RESET_VERIFY_PER_IP = 30
+RESET_VERIFY_PER_IP_WINDOW_MINUTES = 60
 
 # Y sin tope de solicitudes se pueden pedir codigos en bucle, que es la otra
 # mitad: cada solicitud nueva estrena cinco intentos. El tope por correo es el
@@ -534,13 +601,35 @@ def reset_client_ip(request: Request) -> str:
     return request.client.host if request.client else "desconocida"
 
 
-def consume_reset_quota(key: str, limit: int, window_minutes: int) -> Optional[int]:
-    """Registra una solicitud y devuelve los segundos a esperar si se paso del tope.
+def como_utc(valor) -> datetime:
+    """Normaliza una fecha de Mongo a `datetime` con tzinfo UTC.
 
-    `None` = dentro del limite (y queda registrada). Una solicitud rechazada
-    **no** se registra, asi que la ventana no se alarga sola mientras alguien
-    insiste. Los renglones viejos del mismo cubo se borran aqui mismo, que es
-    todo el mantenimiento que necesita la coleccion.
+    pymongo devuelve los `datetime` sin tzinfo (son UTC pero no lo dicen), y
+    mongomock puede devolver la cadena ISO tal cual se guardo. Compararlos con
+    `datetime.now(timezone.utc)` sin normalizar revienta con TypeError.
+    """
+    if isinstance(valor, str):
+        valor = datetime.fromisoformat(valor)
+    if valor.tzinfo is None:
+        valor = valor.replace(tzinfo=timezone.utc)
+    return valor
+
+
+def reset_quota_retry_after(key: str, limit: int, window_minutes: int) -> Optional[int]:
+    """Segundos que faltan para que el cubo `key` tenga lugar, o `None` si ya lo tiene.
+
+    **Solo consulta: no registra nada.** Esa separacion es el arreglo de
+    BOS-359. Antes esto era un `consume_reset_quota` que miraba y registraba de
+    una sola vez, y `forgot-password` lo llamaba primero para el cubo del correo
+    y despues para el de la IP: cuando el de IP rechazaba, el renglon del correo
+    ya estaba escrito. Es decir, una solicitud que contestaba 429 le cobraba al
+    usuario una de sus 3 solicitudes. Muerde justo en el caso para el que el
+    tope de IP se dejo flojo a proposito -- el salon de evento --, donde cada
+    reintento de un usuario legitimo lo dejaba sin rescate 15 minutos mas,
+    incluso despues de que la ventana de IP se liberara.
+
+    Los renglones viejos del mismo cubo se borran aqui mismo, que es todo el
+    mantenimiento que necesita la coleccion.
     """
     ahora = datetime.now(timezone.utc)
     desde = ahora - timedelta(minutes=window_minutes)
@@ -550,15 +639,24 @@ def consume_reset_quota(key: str, limit: int, window_minutes: int) -> Optional[i
         password_reset_requests_col.find({"key": key, "created_at": {"$gte": desde}})
     )
 
-    if len(previas) >= limit:
-        mas_vieja = min(p["created_at"] for p in previas)
-        if mas_vieja.tzinfo is None:
-            mas_vieja = mas_vieja.replace(tzinfo=timezone.utc)
-        espera = (mas_vieja + timedelta(minutes=window_minutes) - ahora).total_seconds()
-        return max(int(espera), 1)
+    if len(previas) < limit:
+        return None
 
-    password_reset_requests_col.insert_one({"key": key, "created_at": ahora})
-    return None
+    mas_vieja = como_utc(min(p["created_at"] for p in previas))
+    espera = (mas_vieja + timedelta(minutes=window_minutes) - ahora).total_seconds()
+    return max(int(espera), 1)
+
+
+def registrar_reset_request(key: str) -> None:
+    """Anota una solicitud **aceptada** en el cubo `key`.
+
+    Se llama despues de haber mirado todos los cubos que aplican, nunca entre
+    dos comprobaciones: una solicitud rechazada no debe gastar cuota de ningun
+    cubo.
+    """
+    password_reset_requests_col.insert_one(
+        {"key": key, "created_at": datetime.now(timezone.utc)}
+    )
 
 
 @app.post("/api/auth/forgot-password")
@@ -566,15 +664,20 @@ async def forgot_password(data: PasswordResetRequest, request: Request):
     """Request password reset - manda un codigo de 6 digitos por correo"""
     # El tope va antes de mirar la base: asi cuesta lo mismo (y se limita
     # igual) pedir el codigo de un correo que existe y de uno que no.
-    clave_correo = data.email.strip().lower()
-    espera = consume_reset_quota(
-        f"email:{clave_correo}",
+    #
+    # Se miran los dos cubos ANTES de registrar en cualquiera de los dos: una
+    # solicitud rechazada no gasta cuota de nada (BOS-359).
+    clave_correo = f"email:{data.email.strip().lower()}"
+    clave_ip = f"ip:{reset_client_ip(request)}"
+
+    espera = reset_quota_retry_after(
+        clave_correo,
         RESET_REQUESTS_PER_EMAIL,
         RESET_REQUESTS_PER_EMAIL_WINDOW_MINUTES,
     )
     if espera is None:
-        espera = consume_reset_quota(
-            f"ip:{reset_client_ip(request)}",
+        espera = reset_quota_retry_after(
+            clave_ip,
             RESET_REQUESTS_PER_IP,
             RESET_REQUESTS_PER_IP_WINDOW_MINUTES,
         )
@@ -584,6 +687,9 @@ async def forgot_password(data: PasswordResetRequest, request: Request):
             detail="Demasiadas solicitudes de recuperación. Intenta de nuevo en unos minutos",
             headers={"Retry-After": str(espera)},
         )
+
+    registrar_reset_request(clave_correo)
+    registrar_reset_request(clave_ip)
 
     user = users_col.find_one({"email": data.email})
 
@@ -615,7 +721,11 @@ async def forgot_password(data: PasswordResetRequest, request: Request):
         "expires_at": datetime.now(timezone.utc) + timedelta(minutes=15),
         "created_at": datetime.now(timezone.utc),
         "used": False,
+        # `attempts` es el contador de por vida (para ver en la base cuanto se
+        # golpeo un rescate); `failed_attempts` son las fechas de los fallos
+        # dentro de la ventana movil, que es lo que de verdad gasta intentos.
         "attempts": 0,
+        "failed_attempts": [],
     })
 
     # `smtplib` es sincrona: va a un hilo para no parar el loop mientras el
@@ -636,8 +746,23 @@ async def forgot_password(data: PasswordResetRequest, request: Request):
     return dict(RESET_RESPUESTA_GENERICA)
 
 @app.post("/api/auth/verify-reset-code")
-async def verify_reset_code(email: str, code: str):
+async def verify_reset_code(email: str, code: str, request: Request):
     """Verify the reset code and return the reset token"""
+    # El tope por IP va antes de mirar la base, igual que en `forgot-password`:
+    # asi el 429 no depende de que el correo exista ni de que tenga un rescate
+    # pedido, y por tanto no cuenta nada de nadie (BOS-359).
+    clave_ip = f"verify_ip:{reset_client_ip(request)}"
+    espera = reset_quota_retry_after(
+        clave_ip, RESET_VERIFY_PER_IP, RESET_VERIFY_PER_IP_WINDOW_MINUTES
+    )
+    if espera is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiados intentos de verificación. Intenta de nuevo en unos minutos",
+            headers={"Retry-After": str(espera)},
+        )
+    registrar_reset_request(clave_ip)
+
     # Se busca por correo, no por correo+codigo: para contar un intento fallido
     # hay que encontrar el token primero. Solo hay uno vivo por correo, porque
     # `forgot-password` borra los anteriores.
@@ -647,28 +772,37 @@ async def verify_reset_code(email: str, code: str):
     })
 
     # El mismo 400 para todo lo que no sea el codigo correcto: un codigo
-    # equivocado, un token que ya no existe y un token quemado por intentos se
-    # contestan igual, para no decir en que estado esta el rescate de nadie.
+    # equivocado, un token que ya no existe, uno vencido y uno sin intentos en
+    # la ventana se contestan igual, para no decir en que estado esta el rescate
+    # de nadie -- ni si el correo esta registrado.
     invalido = HTTPException(status_code=400, detail="Código inválido o expirado")
 
     if not reset_doc:
         raise invalido
 
-    # Check expiry
-    expires_at = reset_doc["expires_at"]
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    # Vencido -> el MISMO 400 generico, no un texto propio (BOS-359).
+    #
+    # Antes esta rama contestaba "El código ha expirado", y eso era un oraculo
+    # de existencia: la consulta de arriba busca por `{email, used: False}` -- no
+    # por codigo --, asi que bastaba el correo y cualquier codigo para llegar
+    # aqui. Un correo registrado que dejo vencer su codigo contestaba un texto
+    # distinto que un correo no registrado, sin gastar intentos y sin limite. El
+    # TTL de `expires_at` barre el documento, pero tarda hasta un minuto y la
+    # respuesta no puede depender de eso.
+    if como_utc(reset_doc["expires_at"]) < datetime.now(timezone.utc):
+        raise invalido
 
-    if expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="El código ha expirado")
+    # Intentos fallidos dentro de la ventana movil. Los de antes de la ventana
+    # ya no cuentan, y el token NO se quema: ver la nota de
+    # RESET_CODE_ATTEMPTS_WINDOW_MINUTES.
+    ahora = datetime.now(timezone.utc)
+    desde = ahora - timedelta(minutes=RESET_CODE_ATTEMPTS_WINDOW_MINUTES)
+    fallos = [
+        como_utc(f) for f in (reset_doc.get("failed_attempts") or [])
+    ]
+    fallos = [f for f in fallos if f >= desde]
 
-    intentos = int(reset_doc.get("attempts", 0) or 0)
-    if intentos >= RESET_CODE_MAX_ATTEMPTS:
-        password_resets_col.update_one(
-            {"token": reset_doc["token"]}, {"$set": {"used": True}}
-        )
+    if len(fallos) >= RESET_CODE_MAX_ATTEMPTS:
         raise invalido
 
     # Se comparan bytes, no cadenas: `compare_digest` con `str` revienta con un
@@ -677,15 +811,20 @@ async def verify_reset_code(email: str, code: str):
     enviado_bytes = str(code or "").encode("utf-8")
     guardado_bytes = str(reset_doc.get("code") or "").encode("utf-8")
     if not hmac.compare_digest(enviado_bytes, guardado_bytes):
-        intentos += 1
-        cambios = {"attempts": intentos}
-        if intentos >= RESET_CODE_MAX_ATTEMPTS:
-            # Quemado: ni el codigo correcto sirve ya, y `reset-password`
-            # tampoco acepta el token porque busca `used: False`. Hay que pedir
-            # uno nuevo, y eso tiene su propio tope.
-            cambios["used"] = True
-        password_resets_col.update_one({"token": reset_doc["token"]}, {"$set": cambios})
+        fallos.append(ahora)
+        password_resets_col.update_one(
+            {"token": reset_doc["token"]},
+            {"$set": {"failed_attempts": fallos}, "$inc": {"attempts": 1}},
+        )
         raise invalido
+
+    # El codigo correcto limpia la ventana: quien llega aqui ya tiene el token,
+    # y dejar fallos colgando solo serviria para estorbarle si reintenta. Se
+    # mira lo guardado, no `fallos`, que ya viene podado por la ventana.
+    if reset_doc.get("failed_attempts"):
+        password_resets_col.update_one(
+            {"token": reset_doc["token"]}, {"$set": {"failed_attempts": []}}
+        )
 
     return {"success": True, "reset_token": reset_doc["token"]}
 
@@ -699,15 +838,10 @@ async def reset_password(data: PasswordResetConfirm):
     
     if not reset_doc:
         raise HTTPException(status_code=400, detail="Token inválido o ya usado")
-    
-    # Check expiry
-    expires_at = reset_doc["expires_at"]
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    
-    if expires_at < datetime.now(timezone.utc):
+
+    # Check expiry. Aqui el texto propio no filtra nada: para llegar hay que
+    # traer el token, que solo se obtiene verificando el codigo.
+    if como_utc(reset_doc["expires_at"]) < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="El token ha expirado")
     
     # Validate new password
