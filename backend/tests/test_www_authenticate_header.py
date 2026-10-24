@@ -17,11 +17,13 @@ Reparto que esta prueba fija:
     `error`/`error_description` (el RFC pide no mandar codigo de error cuando
     la peticion no presento credencial, y una descripcion que refleje la
     entrada seria una filtracion).
-  * `/api/auth/login` y `/api/auth/google/session` **no** lo llevan, a
-    proposito. Son endpoints de intercambio de credencial, no recursos
-    protegidos: no existe ningun token con el que reintentar ese POST, asi que
-    anunciar `Bearer` mandaria al cliente conforme a repetir el login con un
-    token. Decision documentada en el codigo junto a cada 401.
+  * `/api/auth/login` **no** lo lleva, a proposito. Es un endpoint de
+    intercambio de credencial, no un recurso protegido: no existe ningun token
+    con el que reintentar ese POST, asi que anunciar `Bearer` mandaria al
+    cliente conforme a repetir el login con un token. Decision documentada en
+    el codigo junto al 401. (`/api/auth/google/session` estaba del mismo lado
+    del reparto; se quito entero en BOS-350 y por eso ya no aparece en el
+    inventario.)
   * El **403 no se toco**. El reparto de BOS-242 (401 = no presentaste
     credencial, 403 = credencial bien formada pero incorrecta) sigue igual, y
     el 403 no gana cabecera ni cambia de codigo.
@@ -34,7 +36,7 @@ Lo que verifica, contra el `server.py` real y una base en memoria:
     y sin reto, el 200 no cambia
   * `get_current_user` por HTTP: los 401 traen el reto, incluido el del cookie
     de sesion expirado
-  * los 401 de login y de la sesion de Google siguen sin reto
+  * los 401 del login siguen sin reto
 
     python backend/tests/test_www_authenticate_header.py
 """
@@ -92,8 +94,9 @@ INVENTARIO_401_ESPERADO = {
     ("verify_admin", True): 1,
     # Intercambio de credencial: usuario inexistente + contrasena incorrecta.
     ("login", False): 2,
-    # Intercambio de credencial: el session_id de Google no sirve.
-    ("process_google_session", False): 1,
+    # `process_google_session` tenia 1 x 401 sin reto. El endpoint se quito en
+    # BOS-350; si alguien lo revive, este inventario falla y obliga a volver a
+    # decidir de que lado cae.
 }
 
 CHECKS = []
