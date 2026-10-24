@@ -88,10 +88,18 @@ La tercera (BOS-361, PR #13) cerró tres bordes que la segunda dejó abiertos:
   personas de un salón de evento completaban el rescate, y la 11 se quedaba
   esperando casi una hora con un código en la mano que vive 15 minutos — se le
   vencía antes de que la ventana se liberara. `3 × 20 = 60` es el techo del
-  tráfico legítimo; con margen, 90. **No afloja la fuerza bruta:** el que acota
-  el ataque contra *una* cuenta es el presupuesto por token (15 intentos en los
-  15 minutos de vida), y ese no se movió. El tope por IP solo acota a cuántas
-  cuentas **distintas** puede golpear una sola máquina por hora.
+  tráfico legítimo; con margen, 90. **Sí afloja una capa — la que no estaba
+  deteniendo nada.** Un tope por IP no solo acota cuántas cuentas *distintas*
+  golpea una máquina: también acota los intentos contra *una* cuenta desde esa
+  IP, y ese número es justo el que se triplicó. Lo que de verdad ataba una
+  fuerza bruta dirigida está encima y no se movió: el presupuesto por correo son
+  3 tokens cada cuarto de hora, 15 intentos cada uno, o sea **180 intentos por
+  hora** contra una víctima concreta — ni 30 ni 90 eran la restricción que
+  mordía ahí. Un atacante con dos IPs ya igualaba las 60 y con seis tenía las
+  180 enteras, porque un tope por IP se evade con proxies y nunca fue el control
+  serio contra alguien decidido. La aritmética sigue siendo mala para él: 90 en
+  10⁶ es **0.009% por hora** desde una IP. O sea que el cambio afloja la capa
+  que no mordía y a cambio arregla un daño medido y seguro.
 - **La ventana de intentos se escribe atómica.** Era un read-modify-write: se
   leía el documento, se podaba en Python y se reescribía la lista entera. No era
   explotable por arquitectura y no por diseño — el handler no tiene un solo
