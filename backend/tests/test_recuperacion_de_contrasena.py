@@ -38,6 +38,17 @@ Lo que esta prueba fija, en capas:
        `verify-reset-code` tiene su propio tope por IP
      - una solicitud rechazada por el tope de IP ya **no** gasta cuota del tope
        por correo
+  9. las tres cosas que ese mismo PR dejo abiertas (BOS-361):
+     - el salon de evento **completo** alcanza a verificar: 20 cuentas desde una
+       sola IP, con dos tecleos malos cada una, y ninguna se come un 429. El tope
+       de verify por IP estaba en 30, mas chico que el trafico legitimo que el
+       tope de forgot (20/hora) deja generar desde esa misma IP
+     - el contador que gatea los 5 intentos se escribe **atomico**: `$push` para
+       agregar y `$pull` por fecha para podar, nunca un `$set` de una lista
+       calculada en Python
+     - el cubo de cuotas tiene **TTL** sobre `created_at`, y con la vida de la
+       ventana mas larga, no con el `expireAfterSeconds=0` que sobre ese campo
+       apagaria los topes
 
 Lo que NO toca este cambio, y sigue en verde aqui: los 15 minutos de
 expiracion, el uso unico del token y la respuesta igual para un correo que no
@@ -879,9 +890,9 @@ def capa_8_los_tres_huecos_de_bos_359():
     # Y el tope por IP: quemar tokens ajenos ya no es gratis.
     limpiar_topes()
     ok(
-        "el tope de verify es 30 por IP cada hora",
+        "el tope de verify es 90 por IP cada hora (subido de 30 en BOS-361)",
         (server.RESET_VERIFY_PER_IP, server.RESET_VERIFY_PER_IP_WINDOW_MINUTES)
-        == (30, 60),
+        == (90, 60),
         f"{server.RESET_VERIFY_PER_IP}/{server.RESET_VERIFY_PER_IP_WINDOW_MINUTES}",
     )
     for n in range(server.RESET_VERIFY_PER_IP):
@@ -899,7 +910,7 @@ def capa_8_los_tres_huecos_de_bos_359():
         headers={"X-Forwarded-For": "10.8.9.9"},
     )
     ok(
-        "la llamada 31 desde la misma IP -> 429",
+        f"la llamada {server.RESET_VERIFY_PER_IP + 1} desde la misma IP -> 429",
         res.status_code == 429,
         f"{res.status_code}: {res.text[:120]}",
     )
@@ -1030,6 +1041,294 @@ def capa_8_los_tres_huecos_de_bos_359():
     )
 
 
+# ---------------------------------------------------------------------------
+def operadores_mongo_sobre(nodo, campo):
+    """Operadores de Mongo ($set/$push/$pull/...) aplicados a `campo` dentro de `nodo`.
+
+    Se lee del AST y no del comportamiento a proposito: el punto 2 de BOS-361 es
+    una carrera entre workers, y `TestClient` no tiene concurrencia real con la
+    que provocarla. Lo que se puede exigir es la forma de la escritura.
+    """
+    usados = []
+    for sub in ast.walk(nodo):
+        if not isinstance(sub, ast.Dict):
+            continue
+        for llave, valor in zip(sub.keys, sub.values):
+            if not (isinstance(llave, ast.Constant) and isinstance(llave.value, str)):
+                continue
+            if not llave.value.startswith("$") or not isinstance(valor, ast.Dict):
+                continue
+            for k2, v2 in zip(valor.keys, valor.values):
+                if isinstance(k2, ast.Constant) and k2.value == campo:
+                    usados.append((llave.value, v2))
+    return usados
+
+
+def capa_9_lo_que_dejo_abierto_bos_359():
+    print()
+    print("=" * 72)
+    print("Capa 9 -- las tres cosas que dejo abiertas el PR de BOS-359 (BOS-361)")
+    print("=" * 72)
+
+    # --- 9a. el salon de evento completo alcanza a verificar -----------------
+    #
+    # `RESET_REQUESTS_PER_IP = 20` deja que 20 personas detras de un NAT pidan su
+    # codigo, y cada una necesita 1 a 3 llamadas de verify. El tope de verify
+    # estaba en 30, mas chico que ese trafico legitimo: medido con 20 cuentas y
+    # dos tecleos malos cada una, solo 10 personas completaban el rescate y la 11
+    # se comia un 429 con Retry-After de casi una hora, con un codigo en la mano
+    # que vive 15 minutos.
+    #
+    # Esta prueba es la sonda: se llena el cubo de forgot de una sola IP con
+    # cuentas distintas y se exige que TODAS alcancen a verificar.
+    limpiar_topes()
+    salon = "10.9.0.77"
+    completaron = 0
+    primer_429 = None
+    llamadas_verify = 0
+
+    for n in range(server.RESET_REQUESTS_PER_IP):
+        correo = f"capa9-salon-{n}-bos361@kwtest-local.com"
+        registrar(correo)
+        res, doc = pedir_codigo(correo, ip=salon)
+        if res.status_code != 200:
+            ok(f"la persona {n + 1} deberia poder pedir su codigo", False, res.text[:120])
+            break
+        codigo = doc["code"]
+        malo = "000000" if codigo != "000000" else "111111"
+
+        # Dos tecleos malos y el bueno: el peor caso legitimo, 3 llamadas.
+        for intento in (malo, malo, codigo):
+            res = client.post(
+                "/api/auth/verify-reset-code",
+                params={"email": correo, "code": intento},
+                headers={"X-Forwarded-For": salon},
+            )
+            llamadas_verify += 1
+            if res.status_code == 429 and primer_429 is None:
+                primer_429 = (n + 1, llamadas_verify, res.headers.get("retry-after"))
+        if res.status_code == 200:
+            completaron += 1
+
+    ok(
+        f"las {server.RESET_REQUESTS_PER_IP} personas del salon completaron su rescate "
+        "desde una sola IP",
+        completaron == server.RESET_REQUESTS_PER_IP,
+        f"{completaron} de {server.RESET_REQUESTS_PER_IP}"
+        + (
+            f"; primer 429 en la persona {primer_429[0]}, llamada {primer_429[1]} "
+            f"de verify, Retry-After={primer_429[2]}"
+            if primer_429
+            else ""
+        ),
+    )
+    ok(
+        "y ninguna llamada de verify del salon se contesto con 429",
+        primer_429 is None,
+        repr(primer_429),
+    )
+    ok(
+        "el tope de verify cubre el techo del trafico legitimo (3 x el de forgot)",
+        server.RESET_VERIFY_PER_IP >= 3 * server.RESET_REQUESTS_PER_IP,
+        f"verify {server.RESET_VERIFY_PER_IP} vs 3 x forgot "
+        f"{3 * server.RESET_REQUESTS_PER_IP}",
+    )
+    # Y el tope sigue existiendo: subirlo no es quitarlo. La capa 8 ya comprueba
+    # el 429 en la llamada RESET_VERIFY_PER_IP + 1.
+    ok(
+        "el tope de verify sigue siendo finito y por hora",
+        server.RESET_VERIFY_PER_IP < 1000
+        and server.RESET_VERIFY_PER_IP_WINDOW_MINUTES == 60,
+        f"{server.RESET_VERIFY_PER_IP}/{server.RESET_VERIFY_PER_IP_WINDOW_MINUTES}",
+    )
+    # El presupuesto por token no se movio: ese es el que acota la fuerza bruta
+    # contra UNA cuenta, y es lo que hace que subir el tope por IP no la debilite.
+    ok(
+        "el presupuesto por token no se movio (5 intentos en 5 minutos)",
+        (server.RESET_CODE_MAX_ATTEMPTS, server.RESET_CODE_ATTEMPTS_WINDOW_MINUTES)
+        == (5, 5),
+        f"{server.RESET_CODE_MAX_ATTEMPTS}/{server.RESET_CODE_ATTEMPTS_WINDOW_MINUTES}",
+    )
+
+    # --- 9b. el contador de intentos se escribe atomico ---------------------
+    #
+    # El gate de los 5 intentos leia el documento, podaba la ventana en memoria y
+    # reescribia la lista entera con `$set`: un read-modify-write. Dos peticiones
+    # que leyeran antes de que la otra escribiera se pisaban el renglon, asi que
+    # el contador que de verdad gatea podia contar de menos. No era explotable
+    # con un solo worker -- entre la lectura y la escritura no hay ni un `await`,
+    # asi que el event loop no intercala --, pero se volvia real con mas de un
+    # worker o mas de una instancia, que es justo lo que pasa al escalar.
+    fuente = open(os.path.join(BACKEND, "server.py"), encoding="utf-8").read()
+    arbol = ast.parse(fuente)
+    verify = nodo_de_funcion(arbol, "verify_reset_code")
+    ok("se encontro verify_reset_code en el AST", verify is not None)
+
+    operadores = operadores_mongo_sobre(verify, "failed_attempts")
+    nombres = [op for op, _ in operadores]
+    ok(
+        "el fallo se agrega con $push (no reescribiendo la lista)",
+        "$push" in nombres,
+        repr(nombres),
+    )
+    ok(
+        "y la ventana se poda con $pull por fecha",
+        "$pull" in nombres,
+        repr(nombres),
+    )
+    # El unico `$set` que queda permitido sobre `failed_attempts` es el que la
+    # limpia con una lista vacia literal tras el acierto: ese no depende de nada
+    # que se haya leido. Un `$set` de una lista calculada en Python es el
+    # read-modify-write de vuelta.
+    sets_calculados = [
+        ast.dump(valor)
+        for op, valor in operadores
+        if op == "$set"
+        and not (isinstance(valor, ast.List) and not valor.elts)
+    ]
+    ok(
+        "no queda ningun $set de una lista calculada en Python",
+        sets_calculados == [],
+        repr(sets_calculados)[:200],
+    )
+    ok(
+        "el contador de por vida sigue yendo con $inc",
+        "$inc" in [op for op, _ in operadores_mongo_sobre(verify, "attempts")],
+        repr([op for op, _ in operadores_mongo_sobre(verify, "attempts")]),
+    )
+    # Y el comportamiento visible no cambio: la capa 3 ya exige que cada fallo
+    # quede contado y que el quinto agote la ventana. Aqui solo se vuelve a mirar
+    # que el acierto limpie la ventana, que es el otro camino de escritura.
+    limpiar_topes()
+    correo = "capa9-atomico-bos361@kwtest-local.com"
+    registrar(correo)
+    _, doc = pedir_codigo(correo, ip="10.9.1.1")
+    codigo = doc["code"]
+    malo = "000000" if codigo != "000000" else "111111"
+    for _ in range(2):
+        client.post(
+            "/api/auth/verify-reset-code", params={"email": correo, "code": malo}
+        )
+    guardado = server.password_resets_col.find_one({"token": doc["token"]})
+    ok(
+        "dos fallos siguen quedando contados con la escritura nueva",
+        guardado.get("attempts") == 2
+        and len(guardado.get("failed_attempts") or []) == 2,
+        repr((guardado.get("attempts"), len(guardado.get("failed_attempts") or []))),
+    )
+    res = client.post(
+        "/api/auth/verify-reset-code", params={"email": correo, "code": codigo}
+    )
+    guardado = server.password_resets_col.find_one({"token": doc["token"]})
+    ok(
+        "y el acierto sigue limpiando la ventana",
+        res.status_code == 200
+        and (guardado.get("failed_attempts") or []) == [],
+        f"{res.status_code}; {guardado.get('failed_attempts')!r}",
+    )
+    # El `$pull` por fecha tiene que quitar de verdad los fallos de antes de la
+    # ventana, no solo estar escrito. Se simula moviendo el fallo al pasado y se
+    # provoca otro: el viejo se va y queda solo el nuevo.
+    limpiar_topes()
+    _, doc = pedir_codigo(correo, ip="10.9.1.2")
+    codigo = doc["code"]
+    malo = "000000" if codigo != "000000" else "111111"
+    atras = datetime.now(timezone.utc) - timedelta(
+        minutes=server.RESET_CODE_ATTEMPTS_WINDOW_MINUTES + 1
+    )
+    server.password_resets_col.update_one(
+        {"token": doc["token"]}, {"$set": {"failed_attempts": [atras, atras]}}
+    )
+    client.post("/api/auth/verify-reset-code", params={"email": correo, "code": malo})
+    guardado = server.password_resets_col.find_one({"token": doc["token"]})
+    ok(
+        "el $pull se llevo los fallos de antes de la ventana (queda solo el nuevo)",
+        len(guardado.get("failed_attempts") or []) == 1,
+        repr(len(guardado.get("failed_attempts") or [])),
+    )
+
+    # --- 9c. el cubo de cuotas ya no es basura perpetua ---------------------
+    #
+    # `reset_quota_retry_after` poda SOLO la llave que se esta consultando, asi
+    # que los renglones de una llave que no se vuelve a consultar nunca -- la IP
+    # de paso, el correo que pidio una vez -- se quedaban para siempre. Y el PR de
+    # BOS-359 lo acelero sin querer: `verify-reset-code` escribe un renglon por
+    # llamada, y antes la coleccion solo crecia con `forgot-password`.
+    indices = server.password_reset_requests_col.index_information()
+    ok(
+        "password_reset_requests tiene TTL sobre created_at",
+        indices.get("created_at_1", {}).get("expireAfterSeconds")
+        == server.RESET_REQUESTS_TTL_SEGUNDOS,
+        repr(indices.get("created_at_1")),
+    )
+    ok(
+        "y server.py lo reporta activo",
+        server.PASSWORD_RESET_REQUESTS_TTL_ACTIVO is True,
+        repr(server.PASSWORD_RESET_REQUESTS_TTL_ACTIVO),
+    )
+    # El indice compuesto que resuelve la consulta de cuota sigue en pie: el TTL
+    # es otro indice, no lo reemplaza.
+    ok(
+        "el indice compuesto (key, created_at) de la consulta de cuota sigue ahi",
+        any(
+            [c for c, _ in info["key"]] == ["key", "created_at"]
+            for nombre, info in indices.items()
+            if nombre != "_id_"
+        ),
+        repr(sorted(indices)),
+    )
+    # La vida del renglon tiene que cubrir la ventana mas larga de TODOS los
+    # cubos, o el TTL borraria renglones que todavia cuentan para un tope -- y
+    # eso seria aflojar los topes por la puerta de atras. Esto es lo que amarra
+    # las dos constantes, que viven en dos partes distintas del archivo.
+    ventana_mas_larga = 60 * max(
+        server.RESET_REQUESTS_PER_EMAIL_WINDOW_MINUTES,
+        server.RESET_REQUESTS_PER_IP_WINDOW_MINUTES,
+        server.RESET_VERIFY_PER_IP_WINDOW_MINUTES,
+    )
+    ok(
+        "el TTL cubre la ventana mas larga de los cubos",
+        server.RESET_REQUESTS_TTL_SEGUNDOS >= ventana_mas_larga,
+        f"TTL {server.RESET_REQUESTS_TTL_SEGUNDOS} s vs ventana {ventana_mas_larga} s",
+    )
+    # Y el TTL NO es `expireAfterSeconds=0`. Sobre un campo que es la fecha de
+    # creacion, 0 significa "borra el renglon recien escrito": apagaria los dos
+    # topes de forgot y el de verify de una sola vez. Por eso
+    # `asegurar_indice_ttl` dejo de tener el 0 clavado.
+    ok(
+        "el TTL no es 0 (sobre created_at eso apagaria los topes)",
+        server.RESET_REQUESTS_TTL_SEGUNDOS > 0,
+        str(server.RESET_REQUESTS_TTL_SEGUNDOS),
+    )
+    limpiar_topes()
+    client.post(
+        "/api/auth/forgot-password",
+        json={"email": "capa9-ttl-bos361@kwtest-local.com"},
+        headers={"X-Forwarded-For": "10.9.2.1"},
+    )
+    ok(
+        "un renglon recien escrito sigue contando para el tope (el TTL no lo barre)",
+        server.password_reset_requests_col.count_documents({"key": "ip:10.9.2.1"}) == 1,
+        str(server.password_reset_requests_col.count_documents({"key": "ip:10.9.2.1"})),
+    )
+    # El renglon viejo si desaparece. mongomock aplica el TTL al leer, asi que ahi
+    # se va en el acto; contra Mongo real el barrido tarda hasta ~60 s, asi que lo
+    # que se puede exigir en los dos modos es que ya no cuente para el tope -- por
+    # el TTL o por la ventana de la consulta.
+    server.password_reset_requests_col.insert_one(
+        {
+            "key": "ip:10.9.2.2",
+            "created_at": datetime.now(timezone.utc)
+            - timedelta(seconds=server.RESET_REQUESTS_TTL_SEGUNDOS + 600),
+        }
+    )
+    ok(
+        "un renglon mas viejo que el TTL ya no cuenta para ningun tope",
+        server.reset_quota_retry_after("ip:10.9.2.2", 1, 60) is None,
+        repr(server.reset_quota_retry_after("ip:10.9.2.2", 1, 60)),
+    )
+
+
 def finish():
     passed = sum(1 for good, _, _ in CHECKS if good)
     failed = [(label, detail) for good, label, detail in CHECKS if not good]
@@ -1061,6 +1360,7 @@ def correr():
     capa_6_el_camino_de_desarrollo_no_arranca_en_produccion()
     capa_7_el_mailer()
     capa_8_los_tres_huecos_de_bos_359()
+    capa_9_lo_que_dejo_abierto_bos_359()
     return finish()
 
 
