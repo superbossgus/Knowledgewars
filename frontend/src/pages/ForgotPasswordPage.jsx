@@ -19,12 +19,12 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await api.post('/api/auth/forgot-password', { email });
-      toast.success('Código enviado a tu email');
-      // In development, show the code
-      if (response.data._dev_code) {
-        toast.info(`Código de desarrollo: ${response.data._dev_code}`, { duration: 10000 });
-      }
+      await api.post('/api/auth/forgot-password', { email });
+      // Aqui se pintaba `_dev_code`, el codigo de 6 digitos que el backend
+      // devolvia en la respuesta. Quitado en BOS-353: con ese campo, cualquiera
+      // que pidiera el codigo de un correo ajeno se quedaba con la cuenta. El
+      // codigo ahora solo llega por correo, asi que no hay nada que pintar.
+      toast.success('Si el correo está registrado, te llegará un código');
       setStep(2);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Error al enviar código');
@@ -130,9 +130,10 @@ export default function ForgotPasswordPage() {
               </div>
               
               <p className="text-sm text-muted-foreground mb-4">
-                Hemos enviado un código de 6 dígitos a <span className="text-white font-semibold">{email}</span>
+                Si <span className="text-white font-semibold">{email}</span> está registrado, ahí llegó un código de 6 dígitos.
+                Vence en 15 minutos y tienes 5 intentos para escribirlo.
               </p>
-              
+
               <input
                 type="text"
                 required
