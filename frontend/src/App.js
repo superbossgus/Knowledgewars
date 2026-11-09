@@ -15,13 +15,25 @@ import StorePage from './pages/StorePage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AdminPage from './pages/AdminPage';
+import PrivacidadPage from './pages/PrivacidadPage';
+import TerminosPage from './pages/TerminosPage';
+import ReaceptacionPage from './pages/ReaceptacionPage';
+import LegalFooter from './components/custom/LegalFooter';
 import './i18n';
 import './App.css';
 import 'flag-icons/css/flag-icons.min.css';
 
 function ProtectedRoute({ children }) {
   const token = useAuthStore((state) => state.token);
-  return token ? children : <Navigate to="/login" replace />;
+  const user = useAuthStore((state) => state.user);
+  if (!token) return <Navigate to="/login" replace />;
+  // El muro de reaceptacion (BOS-351, §5.4). Va *dentro* de ProtectedRoute y no
+  // como ruta aparte a proposito: asi cubre cualquier pantalla con sesion, sin
+  // que cada una tenga que acordarse de comprobarlo. `/privacidad`, `/terminos`
+  // y `/login` quedan fuera porque no son rutas protegidas -- el usuario tiene
+  // que poder leer lo que se le pide aceptar, y poder salirse.
+  if (user?.legal?.requiere_reaceptacion) return <ReaceptacionPage />;
+  return children;
 }
 
 function ChallengeNotification({ challenge, onAccept, onReject, isRematch }) {
@@ -352,8 +364,14 @@ function AppContent() {
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        {/* Publicas y sin credencial (BOS-351, §3.1): el enlace tiene que
+            servir pegado en un correo o en una cotizacion, y quien va a
+            aceptar tiene que poder leerlo antes de tener cuenta. */}
+        <Route path="/privacidad" element={<PrivacidadPage />} />
+        <Route path="/terminos" element={<TerminosPage />} />
         <Route path="/" element={<Navigate to="/home" replace />} />
       </Routes>
+      <LegalFooter />
       <Toaster position="top-center" richColors />
     </div>
   );
