@@ -151,6 +151,8 @@ def register(email, name):
             "country_code": "mx",
             "favorite_topic": TOPIC,
             "language": LANGUAGE,
+            # Casilla obligatoria de BOS-351: sin esto el alta contesta 400.
+            "acepta_terminos": True,
         },
     )
     assert response.status_code == 200, (response.status_code, response.text[:400])

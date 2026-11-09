@@ -24,8 +24,10 @@ from pydantic import BaseModel
 
 from models import (
     UserCreate, UserLogin, UserProfile, MatchCreate, MatchAnswer, MatchHint,
-    CheckoutRequest, CouponCreate, CouponApply, LeaderboardEntry, LeaderboardResponse
+    CheckoutRequest, CouponCreate, CouponApply, LeaderboardEntry, LeaderboardResponse,
+    AceptacionLegal
 )
+import legal
 from utils import (
     hash_password, verify_password, create_access_token, decode_access_token,
     extract_bearer_token, serialize_doc, ELOCalculator, QuestionGenerator
@@ -101,6 +103,13 @@ password_resets_col = db["password_resets"]  # For password recovery
 # ("email:<correo>" o "ip:<ip>") y la hora; nada del usuario ni del codigo.
 password_reset_requests_col = db["password_reset_requests"]
 admin_users_col = db["admin_users"]  # Admin panel users
+# Registro de consentimiento, **append-only** (BOS-351 / BOS-346 §5.1). Nunca se
+# actualiza ni se borra un renglon: revocar publicidad es un renglon nuevo con
+# `aceptado=False`. Es la unica prueba de que el usuario acepto, y la carga de
+# probarlo es nuestra. No lleva indice TTL a proposito: la conservacion de §5.5
+# (2 anos despues de eliminar la cuenta) se mide desde que la cuenta se elimina,
+# no desde que se firmo, asi que no se puede expresar como un TTL del renglon.
+consents_col = db["consents"]
 
 # Indexes
 users_col.create_index("email", unique=True)
@@ -119,6 +128,10 @@ password_resets_col.create_index("token", unique=True)
 password_resets_col.create_index("email")
 password_reset_requests_col.create_index([("key", 1), ("created_at", DESCENDING)])
 coupons_col.create_index("code", unique=True)
+# El acceso que importa: "cual es el ultimo consentimiento de este usuario para
+# este tipo". Se consulta en cada ingreso para decidir si entra por la pantalla
+# de reaceptacion.
+consents_col.create_index([("user_id", 1), ("tipo", 1), ("fecha_hora", DESCENDING)])
 
 
 def asegurar_indice_ttl(col, campo: str, segundos: int = 0) -> bool:
@@ -354,17 +367,118 @@ async def get_current_user(
 
 
 # ============================================================================
+# CONSENTIMIENTO (BOS-351 / BOS-346 §4 y §5)
+# ============================================================================
+
+CONSENT_TERMINOS = "terminos_privacidad"
+CONSENT_MARKETING = "marketing"
+
+FALTA_CONSENTIMIENTO = (
+    "Para crear tu cuenta tienes que declarar que eres mayor de 18 anos y "
+    "aceptar los Terminos de uso y el Aviso de privacidad."
+)
+
+
+def ip_del_cliente(request: Optional[Request]) -> str:
+    """IP del cliente, best-effort y a sabiendas.
+
+    Detras del proxy de Render la IP real llega en `X-Forwarded-For` y el proxy
+    reescribe la cabecera; un cliente que hable directo con el backend la puede
+    inventar. Para el renglon de consentimiento eso esta bien: la IP es un dato
+    **circunstancial** de la aceptacion, no la prueba. La prueba es el renglon
+    con su fecha de servidor y el hash del texto exacto.
+    """
+    if request is None:
+        return "desconocida"
+    adelantada = request.headers.get("x-forwarded-for", "")
+    if adelantada:
+        return adelantada.split(",")[0].strip()[:64]
+    return request.client.host if request.client else "desconocida"
+
+
+def registrar_consentimiento(
+    user_id: str,
+    tipo: str,
+    aceptado: bool,
+    origen: str,
+    request: Optional[Request] = None,
+) -> dict:
+    """Escribe **un renglon nuevo** en `consents`. Nunca actualiza (§5.1).
+
+    La fecha es del servidor a proposito: la del cliente la pone quien quiera
+    discutir el renglon despues.
+    """
+    renglon = {
+        "user_id": str(user_id),
+        "tipo": tipo,
+        "aceptado": bool(aceptado),
+        "version_terminos": legal.VERSION_TERMINOS,
+        "version_aviso": legal.VERSION_AVISO,
+        "hash_terminos": legal.HASH_TERMINOS,
+        "hash_aviso": legal.HASH_AVISO,
+        "fecha_hora": datetime.now(timezone.utc),
+        "ip": ip_del_cliente(request),
+        "user_agent": (request.headers.get("user-agent", "")[:512] if request else ""),
+        "origen": origen,
+    }
+    consents_col.insert_one(dict(renglon))
+    return renglon
+
+
+def ultimo_consentimiento(user_id: str, tipo: str) -> Optional[dict]:
+    """El renglon mas reciente de ese usuario y tipo.
+
+    `consents` es append-only, asi que "la preferencia actual" no es un campo
+    que se lea: es el ultimo renglon que se escribio.
+    """
+    renglones = list(
+        consents_col.find({"user_id": str(user_id), "tipo": tipo})
+        .sort("fecha_hora", DESCENDING)
+        .limit(1)
+    )
+    return serialize_doc(renglones[0]) if renglones else None
+
+
+def requiere_reaceptacion(user_id: str) -> bool:
+    """`True` si el usuario tiene que volver a aceptar antes de seguir jugando.
+
+    Cubre los dos casos de §5.4: la cuenta creada antes de que existiera el
+    aviso (no tiene ningun renglon) y la cuenta que acepto una version que ya no
+    es la vigente.
+    """
+    return not legal.esta_al_corriente(
+        ultimo_consentimiento(user_id, CONSENT_TERMINOS)
+    )
+
+
+def estado_legal(user_id: str) -> dict:
+    """Lo que el frontend necesita para decidir si levanta el muro de §5.4."""
+    marketing = ultimo_consentimiento(user_id, CONSENT_MARKETING)
+    return {
+        "requiere_reaceptacion": requiere_reaceptacion(user_id),
+        "acepta_marketing": bool(marketing and marketing.get("aceptado")),
+        **legal.versiones_vigentes(),
+    }
+
+
+# ============================================================================
 # AUTH ENDPOINTS
 # ============================================================================
 
 @app.post("/api/auth/register")
-async def register(user_data: UserCreate):
+async def register(user_data: UserCreate, request: Request):
     """Register new user"""
+    # La casilla obligatoria (§4.1, regla 3). El frontend deshabilita el boton
+    # hasta que se marca, pero el que decide es el servidor: el alta es un POST
+    # que cualquiera puede mandar sin pasar por la pantalla.
+    if not user_data.acepta_terminos:
+        raise HTTPException(status_code=400, detail=FALTA_CONSENTIMIENTO)
+
     # Check if user exists
     existing = users_col.find_one({"email": user_data.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
     # Get initial rank info for new users (500 ELO = BRONCE III)
     initial_elo = 500
     initial_rank = ELOCalculator.get_rank(initial_elo)
@@ -396,16 +510,52 @@ async def register(user_data: UserCreate):
     
     result = users_col.insert_one(user_doc)
     user_doc["_id"] = result.inserted_id
-    
+
+    # §5.3, el invariante: **no puede existir una cuenta sin su renglon
+    # `terminos_privacidad / aceptado=true`.** Mongo no nos da una transaccion
+    # aqui (el cluster es un M0 sin replica set), asi que el invariante se
+    # sostiene al reves: si falla la escritura del consentimiento se deshace la
+    # cuenta y el alta falla. Preferimos que el usuario reintente a quedarnos
+    # con una cuenta que no podemos acreditar.
+    try:
+        registrar_consentimiento(
+            str(result.inserted_id),
+            CONSENT_TERMINOS,
+            True,
+            origen="registro_email",
+            request=request,
+        )
+        if user_data.acepta_marketing:
+            # Renglon aparte (§4.1, regla 5): lo que acredita que el marketing
+            # tenia permiso es este renglon, no el de los terminos.
+            registrar_consentimiento(
+                str(result.inserted_id),
+                CONSENT_MARKETING,
+                True,
+                origen="registro_email",
+                request=request,
+            )
+    except Exception:
+        users_col.delete_one({"_id": result.inserted_id})
+        consents_col.delete_many({"user_id": str(result.inserted_id)})
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No pudimos registrar tu aceptacion de los terminos, asi que no "
+                "creamos la cuenta. Vuelve a intentarlo."
+            ),
+        )
+
     # Create JWT token
     token = create_access_token({"user_id": str(result.inserted_id)})
-    
+
     # Add rank progress info to response
     progress_info = ELOCalculator.get_progress_to_next_rank(initial_elo)
     user_data_response = serialize_doc(user_doc)
     user_data_response["rank_tier"] = initial_rank['tier']
     user_data_response["rank_progress"] = progress_info
-    
+    user_data_response["legal"] = estado_legal(str(result.inserted_id))
+
     return {
         "token": token,
         "user": user_data_response
@@ -461,7 +611,11 @@ async def login(credentials: UserLogin):
     user_data["rank_name"] = rank_info['name']
     user_data["rank_tier"] = rank_info['tier']
     user_data["rank_progress"] = progress_info
-    
+    # §5.4: el login si entrega token -- hace falta para poder aceptar y para
+    # poder eliminar la cuenta desde el muro --, pero dice si hay que levantar
+    # el muro antes de dejar jugar.
+    user_data["legal"] = estado_legal(str(user["_id"]))
+
     return {
         "token": token,
         "user": user_data
@@ -526,7 +680,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     user_data["rank_name"] = rank_info['name']
     user_data["rank_tier"] = rank_info['tier']
     user_data["rank_progress"] = progress_info
-    
+    if user_id:
+        user_data["legal"] = estado_legal(str(user_id))
+
     return user_data
 
 
@@ -538,6 +694,158 @@ async def logout(response: Response, session_token: Optional[str] = Cookie(None)
     
     response.delete_cookie(key="session_token", path="/")
     return {"success": True}
+
+
+# ============================================================================
+# DOCUMENTOS LEGALES Y CONSENTIMIENTO (BOS-351)
+# ============================================================================
+
+# `/privacidad` y `/terminos` son **publicas y accesibles sin iniciar sesion**
+# (§3.1): quien tiene que decidir si acepta no puede necesitar una cuenta para
+# leer lo que va a aceptar. Por eso estos dos GET no llevan `Depends`.
+
+@app.get("/api/legal/privacidad")
+async def legal_privacidad():
+    """Aviso de privacidad vigente, con su version y su hash."""
+    return legal.documento(legal.AVISO)
+
+
+@app.get("/api/legal/terminos")
+async def legal_terminos():
+    """Terminos de uso vigentes, con su version y su hash."""
+    return legal.documento(legal.TERMINOS)
+
+
+@app.get("/api/legal/versiones")
+async def legal_versiones():
+    """Versiones y hashes vigentes. Lo usa el frontend y lo usa el monitoreo."""
+    return legal.versiones_vigentes()
+
+
+@app.post("/api/legal/aceptar")
+async def legal_aceptar(
+    datos: AceptacionLegal,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Reaceptacion (§5.4) y cambio de preferencia de publicidad.
+
+    Dos usos y un solo endpoint porque la escritura es la misma: un renglon
+    nuevo en `consents`.
+
+      * `origen=reaceptacion` cuando el usuario venia sin consentimiento
+        vigente -- la pantalla intermedia del muro;
+      * `origen=ajustes` cuando ya estaba al corriente y solo mueve la casilla
+        de novedades desde *Mi cuenta -> Comunicaciones*.
+
+    `acepta_marketing` es tri-estado a proposito: `None` significa "no la
+    toques". Mandar `False` por omision desde un cliente que no muestra esa
+    casilla revocaria un permiso que el usuario si dio.
+    """
+    user_id = str(current_user.get("id") or current_user.get("user_id") or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated", headers=BEARER_CHALLENGE)
+
+    venia_pendiente = requiere_reaceptacion(user_id)
+    origen = "reaceptacion" if venia_pendiente else "ajustes"
+
+    if venia_pendiente and not datos.acepta_terminos:
+        # El muro no se pasa sin aceptar. Lo que si se puede desde el muro es
+        # eliminar la cuenta (§5.4.2) -- ese es `DELETE /api/users/me`.
+        raise HTTPException(status_code=400, detail=FALTA_CONSENTIMIENTO)
+
+    if datos.acepta_terminos and venia_pendiente:
+        registrar_consentimiento(
+            user_id, CONSENT_TERMINOS, True, origen=origen, request=request
+        )
+
+    if datos.acepta_marketing is not None:
+        anterior = ultimo_consentimiento(user_id, CONSENT_MARKETING)
+        ya_estaba = bool(anterior and anterior.get("aceptado"))
+        # Append-only no significa "un renglon por clic": un renglon que repite
+        # el estado anterior no acredita nada nuevo y solo hace crecer la
+        # coleccion. Se escribe cuando el estado **cambia**.
+        if ya_estaba != bool(datos.acepta_marketing):
+            registrar_consentimiento(
+                user_id,
+                CONSENT_MARKETING,
+                bool(datos.acepta_marketing),
+                origen=origen,
+                request=request,
+            )
+
+    return {"success": True, "legal": estado_legal(user_id)}
+
+
+@app.get("/api/users/me/consentimientos")
+async def mis_consentimientos(current_user: dict = Depends(get_current_user)):
+    """El historial completo del propio usuario, en orden.
+
+    Es el derecho de acceso de §3.3 aplicado a lo que mas cuesta reconstruir a
+    mano: que acepto, cuando y sobre que version del texto.
+    """
+    user_id = str(current_user.get("id") or current_user.get("user_id") or "")
+    renglones = [
+        serialize_doc(r)
+        for r in consents_col.find({"user_id": user_id}).sort("fecha_hora", 1)
+    ]
+    return {"consentimientos": renglones, **legal.versiones_vigentes()}
+
+
+@app.delete("/api/users/me")
+async def eliminar_mi_cuenta(current_user: dict = Depends(get_current_user)):
+    """Eliminar la propia cuenta (§3.3 y §5.4.2).
+
+    Existe por dos razones, y la segunda es la que la hace obligatoria: el aviso
+    la promete, y **el muro de reaceptacion no puede ser una trampa**. Un muro
+    que no deja entrar ni salir es un problema peor que el que resuelve.
+
+    Que se borra y que no:
+
+      * el perfil y el historial de partidas se borran -- es lo que el aviso
+        promete;
+      * los renglones de `consents` **se conservan** (§5.5): son la prueba de
+        que el tratamiento previo fue consentido. No es contradictorio con el
+        derecho de cancelacion y asi se dice en el aviso. Se marcan con
+        `cuenta_eliminada_en` en un renglon de cierre, que es lo que le da
+        fecha de inicio a los 2 anos de conservacion.
+      * las compras (`purchases`, `payment_transactions`) se conservan por la
+        obligacion fiscal, tambien dicha en el aviso.
+    """
+    user_id = str(current_user.get("id") or current_user.get("user_id") or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated", headers=BEARER_CHALLENGE)
+
+    # Renglon de cierre: deja por escrito que desde esta fecha corren los 2 anos
+    # de conservacion del registro de consentimiento.
+    consents_col.insert_one(
+        {
+            "user_id": user_id,
+            "tipo": "cuenta_eliminada",
+            "aceptado": False,
+            "version_terminos": legal.VERSION_TERMINOS,
+            "version_aviso": legal.VERSION_AVISO,
+            "hash_terminos": legal.HASH_TERMINOS,
+            "hash_aviso": legal.HASH_AVISO,
+            "fecha_hora": datetime.now(timezone.utc),
+            "origen": "eliminacion_de_cuenta",
+            "cuenta_eliminada_en": datetime.now(timezone.utc),
+        }
+    )
+
+    try:
+        oid = ObjectId(user_id)
+    except Exception:
+        oid = None
+
+    matches_col.delete_many({"$or": [{"player_a_id": user_id}, {"player_b_id": user_id}]})
+    duel_counters_col.delete_many({"user_id": user_id})
+    user_sessions_col.delete_many({"user_id": user_id})
+    if oid is not None:
+        users_col.delete_one({"_id": oid})
+    users_col.delete_many({"user_id": user_id})
+
+    return {"success": True, "mensaje": "Tu cuenta se elimino."}
 
 
 # ============================================================================
@@ -636,11 +944,11 @@ def reset_client_ip(request: Request) -> str:
     inventar. Por eso el tope que importa es el de por-correo: ese no se
     esquiva. Este otro es para que barrer una lista de correos desde una sola
     maquina cueste algo.
+
+    Es `ip_del_cliente` con otro nombre: se conserva el nombre porque es el que
+    leen los topes de BOS-353/BOS-359 y ahi "reset" dice de que cubo se habla.
     """
-    adelantada = request.headers.get("x-forwarded-for", "")
-    if adelantada:
-        return adelantada.split(",")[0].strip()[:64]
-    return request.client.host if request.client else "desconocida"
+    return ip_del_cliente(request)
 
 
 def como_utc(valor) -> datetime:

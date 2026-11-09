@@ -94,6 +94,14 @@ INVENTARIO_401_ESPERADO = {
     ("verify_admin", True): 1,
     # Intercambio de credencial: usuario inexistente + contrasena incorrecta.
     ("login", False): 2,
+    # Recurso protegido (BOS-351). Los dos son el mismo caso raro: el token
+    # decodifico y `get_current_user` devolvio un usuario, pero ese documento no
+    # trae `id` ni `user_id` con el que escribir el renglon de consentimiento ni
+    # con el que borrar la cuenta. Es un credencial que no identifica a nadie, y
+    # eso es un 401 de recurso protegido: lleva reto, porque reintentar con otro
+    # Bearer si tiene sentido.
+    ("legal_aceptar", True): 1,
+    ("eliminar_mi_cuenta", True): 1,
     # `process_google_session` tenia 1 x 401 sin reto. El endpoint se quito en
     # BOS-350; si alguien lo revive, este inventario falla y obliga a volver a
     # decidir de que lado cae.
@@ -172,6 +180,8 @@ def registrar_usuario():
             "country_code": "MX",
             "favorite_topic": "historia",
             "language": "es",
+            # Casilla obligatoria de BOS-351: sin esto el alta contesta 400.
+            "acepta_terminos": True,
         },
     )
     if datos.status_code != 200:
