@@ -1,8 +1,16 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef, useCallback, useContext, createContext } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { useAuthStore } from './store/store';
 import api from './lib/api';
+import {
+  ACCION_ME,
+  DESTINO_PROTEGIDO,
+  ESTADO_AUTH,
+  decidirRutaProtegida,
+  esRutaPublica,
+  hidratarSesion,
+} from './lib/authHydration.mjs';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Swords, X, Shield, Bell } from 'lucide-react';
 import LoginPage from './pages/LoginPage';
@@ -23,17 +31,142 @@ import './i18n';
 import './App.css';
 import 'flag-icons/css/flag-icons.min.css';
 
+/**
+ * Deja que `ProtectedRoute` ofrezca un reintento sin que cada ruta tenga que
+ * recibir la funcion por props. El valor lo pone `AppContent`.
+ */
+const ReintentoDeHidratacionContext = createContext(null);
+
+/** §4.3 -- lo que se ve mientras la sesion no se ha confrontado con el servidor. */
+function PantallaDeHidratacion() {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center bg-gray-950"
+      data-testid="auth-hydrating"
+    >
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 rounded-full border-4 border-gray-700 border-t-[hsl(220,100%,60%)] animate-spin" />
+        <p className="text-gray-400 text-sm">Verificando tu sesión…</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * §4.2 -- el servidor no contesto. No se renderiza nada protegido y tampoco se
+ * cierra la sesion: el token puede seguir siendo bueno. Se ofrece reintentar y
+ * salir, y nada mas.
+ */
+function SesionNoVerificada({ onReintentar }) {
+  const logout = useAuthStore((state) => state.logout);
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center bg-gray-950 p-6"
+      data-testid="auth-unverified"
+    >
+      <div className="max-w-md w-full text-center bg-gray-900/80 border-2 border-gray-700 rounded-2xl p-8">
+        <Bell className="w-10 h-10 mx-auto mb-4 text-[hsl(45,92%,48%)]" />
+        <h2 className="text-xl font-extrabold text-white mb-2">No pudimos verificar tu sesión</h2>
+        <p className="text-gray-300 text-sm mb-6">
+          No hay respuesta del servidor. Por tu seguridad no mostramos tu cuenta hasta poder
+          confirmarla.
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onReintentar} className="flex-1 btn-primary py-3 font-bold" data-testid="auth-retry-button">
+            Reintentar
+          </button>
+          <button
+            onClick={logout}
+            className="flex-1 py-3 rounded-lg font-bold bg-gray-700/80 hover:bg-gray-600/80 text-white border-2 border-gray-600 transition-all"
+          >
+            Salir
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }) {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
-  if (!token) return <Navigate to="/login" replace />;
-  // El muro de reaceptacion (BOS-351, §5.4). Va *dentro* de ProtectedRoute y no
-  // como ruta aparte a proposito: asi cubre cualquier pantalla con sesion, sin
-  // que cada una tenga que acordarse de comprobarlo. `/privacidad`, `/terminos`
-  // y `/login` quedan fuera porque no son rutas protegidas -- el usuario tiene
-  // que poder leer lo que se le pide aceptar, y poder salirse.
-  if (user?.legal?.requiere_reaceptacion) return <ReaceptacionPage />;
-  return children;
+  const estadoAuth = useAuthStore((state) => state.estadoAuth);
+  const reintentar = useContext(ReintentoDeHidratacionContext);
+
+  // La decision vive en `lib/authHydration.mjs` para que se pueda probar sin
+  // React ni navegador (§5 de `spec-h1`: el frontend no tiene arnes de
+  // pruebas y montarlo no estaba autorizado). Aqui solo se traduce el destino
+  // a un elemento.
+  switch (decidirRutaProtegida({ token, estadoAuth, user })) {
+    case DESTINO_PROTEGIDO.LOGIN:
+      return <Navigate to="/login" replace />;
+    // §4.3 -- mientras no este verificada no se renderiza `children` *ni* el
+    // muro: decidir con un valor sin confrontar era justamente el defecto H1, y
+    // un parpadeo de medio segundo es el mismo defecto, mas corto.
+    case DESTINO_PROTEGIDO.CARGANDO:
+      return <PantallaDeHidratacion />;
+    case DESTINO_PROTEGIDO.NO_VERIFICADA:
+      return <SesionNoVerificada onReintentar={reintentar} />;
+    // El muro de reaceptacion (BOS-351, §5.4). Va *dentro* de ProtectedRoute y no
+    // como ruta aparte a proposito: asi cubre cualquier pantalla con sesion, sin
+    // que cada una tenga que acordarse de comprobarlo. `/privacidad`, `/terminos`
+    // y `/login` quedan fuera porque no son rutas protegidas -- el usuario tiene
+    // que poder leer lo que se le pide aceptar, y poder salirse.
+    case DESTINO_PROTEGIDO.REACEPTACION:
+      return <ReaceptacionPage />;
+    default:
+      return children;
+  }
+}
+
+/**
+ * §4.1 -- rehidrata la sesion contra `GET /api/auth/me` al arrancar.
+ *
+ * Devuelve la funcion de hidratacion para que la pantalla de §4.2 pueda
+ * reintentar.
+ */
+function useHidratacionDeSesion() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const token = useAuthStore((state) => state.token);
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const logout = useAuthStore((state) => state.logout);
+  const setEstadoAuth = useAuthStore((state) => state.setEstadoAuth);
+  const yaArranco = useRef(false);
+
+  const hidratar = useCallback(async () => {
+    // Se lee del store y no de la clausura para que el reintento no use un
+    // token viejo.
+    const tokenActual = useAuthStore.getState().token;
+    if (!tokenActual) return;
+    yaArranco.current = true;
+    setEstadoAuth(ESTADO_AUTH.HIDRATANDO);
+
+    const decision = await hidratarSesion({ token: tokenActual, cliente: api, setAuth, logout });
+
+    // `setAuth` y `logout` ya dejan el estado en VERIFICADA / SIN_SESION. El
+    // tercer caso no toca la sesion, asi que hay que marcarlo aqui.
+    if (decision.accion === ACCION_ME.MARCAR_NO_VERIFICADA) {
+      setEstadoAuth(decision.estadoAuth);
+    }
+    if (decision.redirigirALogin) {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate, setAuth, logout, setEstadoAuth]);
+
+  useEffect(() => {
+    if (yaArranco.current) return;
+    if (!token) return;
+    // §4.4 -- `/privacidad`, `/terminos` y `/login` no esperan a la hidratacion
+    // y tampoco la disparan: con un token caducado el interceptor de `lib/api`
+    // echaria al usuario a `/login`, y el punto de esas rutas es poder leer lo
+    // que se te pide aceptar. Si desde ahi navega a una ruta protegida, este
+    // efecto vuelve a correr con el pathname nuevo y entonces si hidrata.
+    if (esRutaPublica(location.pathname)) return;
+    hidratar();
+  }, [token, location.pathname, hidratar]);
+
+  return hidratar;
 }
 
 function ChallengeNotification({ challenge, onAccept, onReject, isRematch }) {
@@ -172,7 +305,12 @@ function useNotificationSocket(token, user, onChallengeReceived, onChallengeAcce
 
 function AppContent() {
   const navigate = useNavigate();
-  const { token, user } = useAuthStore();
+  const { token, user, estadoAuth } = useAuthStore();
+  const reintentarHidratacion = useHidratacionDeSesion();
+  // Mientras la sesion no este verificada no se habla con endpoints con
+  // credencial: un 401 del sondeo de desafios dispararia el interceptor de
+  // `lib/api`, que recarga a `/login`, y eso competiria con la hidratacion.
+  const sesionVerificada = estadoAuth === ESTADO_AUTH.VERIFICADA;
   const [pendingChallenge, setPendingChallenge] = useState(null);
   const [pendingIsRematch, setPendingIsRematch] = useState(false);
   const pendingChallengeRef = useRef(null);
@@ -228,11 +366,11 @@ function AppContent() {
   }, []);
   
   // Connect to WebSocket for real-time notifications
-  useNotificationSocket(token, user, handleChallengeReceived, handleChallengeAccepted, handleChallengeRejected, handleMatchStarted);
+  useNotificationSocket(sesionVerificada ? token : null, user, handleChallengeReceived, handleChallengeAccepted, handleChallengeRejected, handleMatchStarted);
 
   // Also poll for challenges as backup (every 3 seconds)
   useEffect(() => {
-    if (!token) return;
+    if (!token || !sesionVerificada) return;
 
     const checkChallenges = async () => {
       try {
@@ -262,7 +400,7 @@ function AppContent() {
     const interval = setInterval(checkChallenges, 3000);
     
     return () => clearInterval(interval);
-  }, [token, playNotificationSound]);
+  }, [token, sesionVerificada, playNotificationSound]);
 
   const handleAcceptChallenge = async () => {
     if (!pendingChallenge) return;
@@ -292,6 +430,7 @@ function AppContent() {
   };
 
   return (
+    <ReintentoDeHidratacionContext.Provider value={reintentarHidratacion}>
     <div className="App">
       <AnimatePresence>
         {pendingChallenge && (
@@ -374,6 +513,7 @@ function AppContent() {
       <LegalFooter />
       <Toaster position="top-center" richColors />
     </div>
+    </ReintentoDeHidratacionContext.Provider>
   );
 }
 
