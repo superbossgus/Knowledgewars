@@ -32,11 +32,29 @@ class UserCreate(BaseModel):
     country_code: str
     favorite_topic: str
     language: str = "es"
+    # Consentimiento, BOS-351 / BOS-346 §4.1. Son dos actos distintos y por eso
+    # son dos campos: empaquetar "acepto los terminos" con "quiero publicidad"
+    # en un solo booleano no es consentimiento valido para el segundo.
+    #
+    # `acepta_terminos` cubre la declaracion de 18+ y la aceptacion de los dos
+    # documentos, que es como va redactada la casilla. **Sin default**: un alta
+    # que no lo manda se rechaza, no se asume. `False` por omision convertiria
+    # un cliente viejo en una cuenta sin consentimiento.
+    acepta_terminos: bool
+    acepta_marketing: bool = False
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class AceptacionLegal(BaseModel):
+    """Reaceptacion de un usuario que ya existe (BOS-346 §5.4) o cambio de
+    preferencia de publicidad desde ajustes."""
+
+    acepta_terminos: bool
+    acepta_marketing: Optional[bool] = None
 
 
 class UserProfile(BaseModel):

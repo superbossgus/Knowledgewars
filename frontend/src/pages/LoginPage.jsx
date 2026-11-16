@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../store/store';
@@ -31,6 +31,12 @@ export default function LoginPage() {
 
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Las dos casillas de consentimiento (BOS-351, criterio §4.1). **Las dos
+  // arrancan desmarcadas**: una casilla premarcada no es consentimiento, y esa
+  // regla no es de estilo -- es la que decide si lo que guardamos sirve de
+  // prueba. No se persisten ni se precargan de `localStorage` por lo mismo.
+  const [aceptaTerminos, setAceptaTerminos] = useState(false);
+  const [aceptaMarketing, setAceptaMarketing] = useState(false);
   const [rememberMe, setRememberMe] = useState(() => {
     // Check if user previously selected remember me
     return localStorage.getItem('remember_me') === 'true';
@@ -61,8 +67,14 @@ export default function LoginPage() {
 
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
-      const payload = isRegister ? formData : { email: formData.email, password: formData.password };
-      
+      // Los dos consentimientos viajan **por separado** (§4.1, reglas 2 y 5):
+      // aceptar los terminos y aceptar publicidad son dos actos distintos y se
+      // guardan en dos renglones distintos. Empaquetarlos en un solo campo
+      // haria que no se pudiera acreditar el segundo.
+      const payload = isRegister
+        ? { ...formData, acepta_terminos: aceptaTerminos, acepta_marketing: aceptaMarketing }
+        : { email: formData.email, password: formData.password };
+
       const response = await api.post(endpoint, payload);
       const { token, user } = response.data;
       
@@ -251,6 +263,62 @@ export default function LoginPage() {
               </>
             )}
 
+            {/* Las dos casillas del consentimiento (BOS-351, §4.1). Solo en el
+                alta: en el ingreso no se vuelve a preguntar, porque el renglon
+                ya existe y volver a pedirlo lo ensuciaria. Si el texto cambio,
+                lo pide el muro de reaceptacion, no esta pantalla. */}
+            {isRegister && (
+              <div className="space-y-4 rounded-xl border-2 border-[hsl(25,100%,50%,0.25)] bg-background/30 p-4">
+                <label className="flex cursor-pointer items-start gap-3 text-sm text-white/90">
+                  <input
+                    type="checkbox"
+                    checked={aceptaTerminos}
+                    onChange={(e) => setAceptaTerminos(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-2 border-[hsl(25,100%,50%,0.6)] bg-background/50"
+                    data-testid="acepta-terminos-checkbox"
+                  />
+                  <span>
+                    <strong className="font-bold">Soy mayor de 18 anos</strong> y acepto los{' '}
+                    {/* `target="_blank"` no es preferencia de estilo: abrir en la
+                        misma pestana tiraria el formulario a medio llenar, y un
+                        usuario que pierde lo escrito marca la casilla sin leer. */}
+                    <Link
+                      to="/terminos"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[hsl(220,100%,70%)] underline hover:text-white"
+                    >
+                      Terminos de uso
+                    </Link>{' '}
+                    y el{' '}
+                    <Link
+                      to="/privacidad"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[hsl(220,100%,70%)] underline hover:text-white"
+                    >
+                      Aviso de privacidad
+                    </Link>
+                    .
+                  </span>
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-3 text-sm text-white/70">
+                  <input
+                    type="checkbox"
+                    checked={aceptaMarketing}
+                    onChange={(e) => setAceptaMarketing(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-2 border-[hsl(220,100%,50%,0.5)] bg-background/50"
+                    data-testid="acepta-marketing-checkbox"
+                  />
+                  <span>
+                    Quiero recibir novedades, torneos y promociones de Knowledge Wars por correo.{' '}
+                    <em className="text-white/50">(opcional, y puedes desactivarlo despues)</em>
+                  </span>
+                </label>
+              </div>
+            )}
+
             {/* Remember Me Checkbox */}
             <div className="flex items-center gap-3">
               <input
@@ -268,7 +336,10 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              // El boton no se puede pulsar sin la casilla obligatoria. El
+              // backend tambien lo rechaza (422): esto es la cortesia, eso es
+              // la regla. Un `disabled` de frontend no acredita nada.
+              disabled={loading || (isRegister && !aceptaTerminos)}
               className="w-full btn-primary py-4 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="login-submit-button"
             >

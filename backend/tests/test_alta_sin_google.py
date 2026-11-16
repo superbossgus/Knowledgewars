@@ -199,6 +199,8 @@ def capa_2_el_alta_por_correo_esta_completa():
             "country_code": "MX",
             "favorite_topic": "historia",
             "language": "es",
+            # Casilla obligatoria de BOS-351: sin esto el alta contesta 400.
+            "acepta_terminos": True,
         },
     )
     ok("registro -> 200", res.status_code == 200, res.text[:200])

@@ -132,6 +132,8 @@ def registrar(correo):
             "country_code": "MX",
             "favorite_topic": "historia",
             "language": "es",
+            # Casilla obligatoria de BOS-351: sin esto el alta contesta 400.
+            "acepta_terminos": True,
         },
     )
     assert res.status_code == 200, res.text[:300]

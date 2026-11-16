@@ -123,6 +123,8 @@ def registrar_usuario():
             "country_code": "MX",
             "favorite_topic": "historia",
             "language": "es",
+            # Casilla obligatoria de BOS-351: sin esto el alta contesta 400.
+            "acepta_terminos": True,
         },
     )
     if respuesta.status_code != 200:
