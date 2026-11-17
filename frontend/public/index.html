@@ -168,14 +168,58 @@
                     }),
                     (e.__SV = 1));
             })(document, window.posthog || []);
-            posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
-                api_host: "https://us.i.posthog.com",
-                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
-                session_recording: {
-                    recordCrossOriginIframes: true,
-                    capturePerformance: false,
-                },
-            });
+
+            // --- Consentimiento de medición: BOS-600, paso 1 de la Opción A ---
+            //
+            // El snippet de arriba sólo instala el stub `window.posthog` y su
+            // cola en memoria; no abre ninguna conexión. La descarga de
+            // `array.js` y el envío de eventos y grabaciones de sesión empiezan
+            // en `posthog.init`, así que el `init` es lo único que se condiciona
+            // aquí. Dejar el stub intacto significa que cualquier
+            // `window.posthog.capture(...)` sigue siendo seguro de llamar: la
+            // llamada se encola y nunca se envía.
+            //
+            // Falla cerrado. Sin una aceptación explícita y legible no se
+            // inicializa: clave ausente, cadena vacía, cualquier otro valor, o
+            // un `localStorage` que lanza (modo privado, almacenamiento
+            // deshabilitado, cuota) son todos "no".
+            //
+            // El paso 2 (banner) sólo tendrá que escribir la preferencia:
+            //     localStorage.setItem(KW_MEDICION_CLAVE, KW_MEDICION_ACEPTADO);
+            // Esta tarjeta no añade nada visible al visitante.
+            var KW_MEDICION_CLAVE = "kw.medicion.v1";
+            var KW_MEDICION_ACEPTADO = "aceptado";
+
+            // Decisión pura: sólo el valor exacto de aceptación habilita la
+            // medición. Cualquier otra entrada, incluido `null`, es "no".
+            function kwMedicionAceptada(valor) {
+                return valor === KW_MEDICION_ACEPTADO;
+            }
+
+            // Envuelve la lectura. Si `leer` lanza por cualquier motivo la
+            // respuesta es "no"; el `catch` no inicializa nada.
+            function kwMedicionPermitida(leer) {
+                try {
+                    return kwMedicionAceptada(leer());
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            if (
+                kwMedicionPermitida(function () {
+                    return window.localStorage.getItem(KW_MEDICION_CLAVE);
+                })
+            ) {
+                posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
+                    api_host: "https://us.i.posthog.com",
+                    person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
+                    session_recording: {
+                        recordCrossOriginIframes: true,
+                        capturePerformance: false,
+                    },
+                });
+            }
         </script>
     </body>
 </html>
